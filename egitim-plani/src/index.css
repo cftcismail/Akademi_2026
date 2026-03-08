@@ -685,6 +685,7 @@ textarea {
 }
 
 @media (max-width: 1200px) {
+
   .stats-grid,
   .detail-grid,
   .filter-panel,
@@ -699,6 +700,7 @@ textarea {
 }
 
 @media (max-width: 960px) {
+
   .app-shell,
   .app-shell.sidebar-collapsed {
     grid-template-columns: 1fr;
