@@ -4,11 +4,24 @@ import Badge from '../ui/Badge'
 import Card from '../ui/Card'
 import EmptyState from '../ui/EmptyState'
 import PlanEkleModal from '../EgitimPlani/PlanEkleModal'
-import { formatEgitimLabel, getEmployeeRoute } from '../../utils/helpers'
+import { formatEgitimLabel, getEmployeeRoute, getTalepKaynagiLabel } from '../../utils/helpers'
 import TalepDetay from './TalepDetay'
-export default function TaleplerPage({ talepler, planlar, planTalep, egitmenListesi, kurumListesi, kurBilgileri }) {
+import TalepForm from './TalepForm'
+
+export default function TaleplerPage({
+  talepler,
+  planTalep,
+  addTalep,
+  egitmenListesi,
+  kurumListesi,
+  kurBilgileri,
+  katalog,
+  gmyList,
+  egitimKategorileri,
+}) {
   const [selectedTalep, setSelectedTalep] = useState(null)
   const [planningTalep, setPlanningTalep] = useState(null)
+  const [showTalepForm, setShowTalepForm] = useState(false)
   const talepYillari = useMemo(
     () => [...new Set(talepler.map((talep) => talep.talepYili || new Date().getFullYear()))].sort((a, b) => b - a),
     [talepler],
@@ -20,6 +33,8 @@ export default function TaleplerPage({ talepler, planlar, planTalep, egitmenList
 
   const bekleyenTalepSayisi = visibleTalepler.filter((talep) => talep.durum === 'beklemede').length
   const planlananTalepSayisi = visibleTalepler.filter((talep) => talep.durum === 'plana_eklendi').length
+  const yillikTalepSayisi = visibleTalepler.filter((talep) => getTalepKaynagiLabel(talep) === 'Yıllık Talep').length
+  const bireyselTalepSayisi = visibleTalepler.filter((talep) => getTalepKaynagiLabel(talep) === 'Bireysel Talep').length
 
   return (
     <div className="page-stack">
@@ -27,9 +42,12 @@ export default function TaleplerPage({ talepler, planlar, planTalep, egitmenList
         <Card className="surface-card--accent">
           <span className="eyebrow">Talep Yönetimi</span>
           <h2>Yıllara göre yüklenen talepleri yönetin</h2>
-          <p>Talep girişleri admin ekranından yapılır. Bu ekranda yıllara göre geçmiş listeyi izleyin ve plan akışını takip edin.</p>
+          <p>Yıllık yönetici taleplerini ve çalışanlardan gelen bireysel talepleri aynı ekranda izleyin, gerektiğinde doğrudan yeni talep açın.</p>
         </Card>
         <div className="toolbar-actions">
+          <button className="button" onClick={() => setShowTalepForm(true)}>
+            Yeni Talep Ekle
+          </button>
           <Card className="mini-stat">
             <span>Bekleyen Talep</span>
             <strong>{bekleyenTalepSayisi}</strong>
@@ -39,12 +57,12 @@ export default function TaleplerPage({ talepler, planlar, planTalep, egitmenList
             <strong>{planlananTalepSayisi}</strong>
           </Card>
           <Card className="mini-stat">
-            <span>Üretilen Plan Kaydı</span>
-            <strong>{planlar.length}</strong>
+            <span>Yıllık Talep</span>
+            <strong>{yillikTalepSayisi}</strong>
           </Card>
           <Card className="mini-stat">
-            <span>Aktif Yıl</span>
-            <strong>{activeYear}</strong>
+            <span>Bireysel Talep</span>
+            <strong>{bireyselTalepSayisi}</strong>
           </Card>
         </div>
       </section>
@@ -68,6 +86,7 @@ export default function TaleplerPage({ talepler, planlar, planTalep, egitmenList
               <thead>
                 <tr>
                   <th>Talep Yılı</th>
+                  <th>Kaynak</th>
                   <th>Çalışan Adı</th>
                   <th>Sicil No</th>
                   <th>Kullanıcı Kodu</th>
@@ -81,6 +100,9 @@ export default function TaleplerPage({ talepler, planlar, planTalep, egitmenList
                 {visibleTalepler.map((talep) => (
                   <tr key={talep.id}>
                     <td>{talep.talepYili}</td>
+                    <td>
+                      <Badge value={getTalepKaynagiLabel(talep)} />
+                    </td>
                     <td>
                       <Link className="table-link" to={getEmployeeRoute(talep.calisanSicil)}>
                         {talep.calisanAdi}
@@ -124,7 +146,20 @@ export default function TaleplerPage({ talepler, planlar, planTalep, egitmenList
         />
       )}
       <TalepDetay open={Boolean(selectedTalep)} onOpenChange={() => setSelectedTalep(null)} talep={selectedTalep} />
+      <TalepForm
+        key={showTalepForm ? 'talepler-form-open' : 'talepler-form-closed'}
+        open={showTalepForm}
+        onOpenChange={setShowTalepForm}
+        katalog={katalog}
+        gmyList={gmyList}
+        kategoriList={egitimKategorileri}
+        onSubmit={addTalep}
+        defaultTalepKaynagi="Bireysel Talep"
+        title="Yeni talep oluştur"
+        description="Çalışanın bireysel veya yıllık talebini doğrudan bu ekrandan sisteme kaydedin."
+      />
       <PlanEkleModal
+        key={planningTalep?.id || 'plan-modal'}
         open={Boolean(planningTalep)}
         onOpenChange={() => setPlanningTalep(null)}
         talep={planningTalep}

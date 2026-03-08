@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import {
   Bar,
   BarChart,
@@ -39,114 +39,87 @@ export default function IcEgitmenDashboard({ planlar, talepler, gmyList, egitmen
   const [selectedYear, setSelectedYear] = useState(years[0] || new Date().getFullYear())
   const activeYear = years.includes(selectedYear) ? selectedYear : years[0] || new Date().getFullYear()
 
-  const internalPlans = useMemo(
-    () => planlar.filter((plan) => plan.icEgitim && Number(plan.egitimYili) === Number(activeYear)),
-    [activeYear, planlar],
+  const internalPlans = planlar.filter((plan) => plan.icEgitim && Number(plan.egitimYili) === Number(activeYear))
+
+  const internalRequestIds = new Set(internalPlans.map((plan) => plan.talepId).filter(Boolean))
+
+  const internalRequests = talepler.filter(
+    (talep) => Number(talep.talepYili) === Number(activeYear) && internalRequestIds.has(talep.id),
   )
 
-  const internalRequestIds = useMemo(
-    () => new Set(internalPlans.map((plan) => plan.talepId).filter(Boolean)),
-    [internalPlans],
+  const trainerPerformance = Object.values(
+    internalPlans.reduce((accumulator, plan) => {
+      const key = `${plan.egitimci || 'İç Eğitmen Atanmadı'}`.trim() || 'İç Eğitmen Atanmadı'
+
+      if (!accumulator[key]) {
+        accumulator[key] = {
+          ad: key,
+          plan: 0,
+          calisanSet: new Set(),
+          tamamlanan: 0,
+          ertelenen: 0,
+          butce: 0,
+        }
+      }
+
+      accumulator[key].plan += 1
+      accumulator[key].calisanSet.add(plan.calisanSicil)
+      accumulator[key].tamamlanan += plan.durum === 'tamamlandı' ? 1 : 0
+      accumulator[key].ertelenen += plan.durum === 'ertelendi' || plan.durum === 'iptal edildi' ? 1 : 0
+      accumulator[key].butce += getPlanCostInTry(plan, kurBilgileri)
+      return accumulator
+    }, {}),
+  )
+    .map((item) => ({
+      ad: item.ad,
+      plan: item.plan,
+      calisan: item.calisanSet.size,
+      tamamlanan: item.tamamlanan,
+      ertelenen: item.ertelenen,
+      butce: item.butce,
+      completionRate: item.plan ? (item.tamamlanan / item.plan) * 100 : 0,
+    }))
+    .sort((left, right) => right.plan - left.plan || right.calisan - left.calisan)
+
+  const monthlyInternalLoad = AYLAR.map((month, index) => ({
+    month,
+    plan: internalPlans.filter((plan) => plan.egitimAyi === index + 1).length,
+    butce: internalPlans
+      .filter((plan) => plan.egitimAyi === index + 1)
+      .reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0),
+  }))
+
+  const categorySplit = Object.values(
+    internalPlans.reduce((accumulator, plan) => {
+      if (!accumulator[plan.kategori]) {
+        accumulator[plan.kategori] = { kategori: plan.kategori, value: 0 }
+      }
+
+      accumulator[plan.kategori].value += 1
+      return accumulator
+    }, {}),
   )
 
-  const internalRequests = useMemo(
-    () => talepler.filter((talep) => Number(talep.talepYili) === Number(activeYear) && internalRequestIds.has(talep.id)),
-    [activeYear, internalRequestIds, talepler],
-  )
+  const gmyCoverage = gmyList
+    .map((gmy) => {
+      const plansByGmy = internalPlans.filter((plan) => plan.gmy === gmy)
+      return {
+        gmy,
+        plan: plansByGmy.length,
+        calisan: new Set(plansByGmy.map((plan) => plan.calisanSicil)).size,
+      }
+    })
+    .filter((item) => item.plan > 0)
 
-  const trainerPerformance = useMemo(
-    () =>
-      Object.values(
-        internalPlans.reduce((accumulator, plan) => {
-          const key = `${plan.egitimci || 'İç Eğitmen Atanmadı'}`.trim() || 'İç Eğitmen Atanmadı'
+  const statusDistribution = Object.values(
+    internalPlans.reduce((accumulator, plan) => {
+      if (!accumulator[plan.durum]) {
+        accumulator[plan.durum] = { durum: plan.durum, adet: 0 }
+      }
 
-          if (!accumulator[key]) {
-            accumulator[key] = {
-              ad: key,
-              plan: 0,
-              calisanSet: new Set(),
-              tamamlanan: 0,
-              ertelenen: 0,
-              butce: 0,
-            }
-          }
-
-          accumulator[key].plan += 1
-          accumulator[key].calisanSet.add(plan.calisanSicil)
-          accumulator[key].tamamlanan += plan.durum === 'tamamlandı' ? 1 : 0
-          accumulator[key].ertelenen += plan.durum === 'ertelendi' || plan.durum === 'iptal edildi' ? 1 : 0
-          accumulator[key].butce += getPlanCostInTry(plan, kurBilgileri)
-          return accumulator
-        }, {}),
-      )
-        .map((item) => ({
-          ad: item.ad,
-          plan: item.plan,
-          calisan: item.calisanSet.size,
-          tamamlanan: item.tamamlanan,
-          ertelenen: item.ertelenen,
-          butce: item.butce,
-          completionRate: item.plan ? (item.tamamlanan / item.plan) * 100 : 0,
-        }))
-        .sort((left, right) => right.plan - left.plan || right.calisan - left.calisan),
-    [internalPlans, kurBilgileri],
-  )
-
-  const monthlyInternalLoad = useMemo(
-    () =>
-      AYLAR.map((month, index) => ({
-        month,
-        plan: internalPlans.filter((plan) => plan.egitimAyi === index + 1).length,
-        butce: internalPlans
-          .filter((plan) => plan.egitimAyi === index + 1)
-          .reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0),
-      })),
-    [internalPlans, kurBilgileri],
-  )
-
-  const categorySplit = useMemo(
-    () =>
-      Object.values(
-        internalPlans.reduce((accumulator, plan) => {
-          if (!accumulator[plan.kategori]) {
-            accumulator[plan.kategori] = { kategori: plan.kategori, value: 0 }
-          }
-
-          accumulator[plan.kategori].value += 1
-          return accumulator
-        }, {}),
-      ),
-    [internalPlans],
-  )
-
-  const gmyCoverage = useMemo(
-    () =>
-      gmyList
-        .map((gmy) => {
-          const plansByGmy = internalPlans.filter((plan) => plan.gmy === gmy)
-          return {
-            gmy,
-            plan: plansByGmy.length,
-            calisan: new Set(plansByGmy.map((plan) => plan.calisanSicil)).size,
-          }
-        })
-        .filter((item) => item.plan > 0),
-    [gmyList, internalPlans],
-  )
-
-  const statusDistribution = useMemo(
-    () =>
-      Object.values(
-        internalPlans.reduce((accumulator, plan) => {
-          if (!accumulator[plan.durum]) {
-            accumulator[plan.durum] = { durum: plan.durum, adet: 0 }
-          }
-
-          accumulator[plan.durum].adet += 1
-          return accumulator
-        }, {}),
-      ),
-    [internalPlans],
+      accumulator[plan.durum].adet += 1
+      return accumulator
+    }, {}),
   )
 
   const topPlanAward = trainerPerformance[0]

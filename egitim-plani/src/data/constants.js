@@ -56,6 +56,8 @@ export const DURUM_LISTESI = [
 
 export const TALEP_DURUMLARI = ['beklemede', 'plana_eklendi']
 
+export const TALEP_KAYNAKLARI = ['Yıllık Talep', 'Bireysel Talep']
+
 export const AYLAR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
 
 export const KPI_KARTLARI = [
@@ -68,6 +70,8 @@ export const KPI_KARTLARI = [
 export const BADGE_VARIANTS = {
   beklemede: 'warning',
   plana_eklendi: 'info',
+  'Yıllık Talep': 'primary',
+  'Bireysel Talep': 'accent',
   planlandı: 'info',
   tamamlandı: 'success',
   'iptal edildi': 'danger',

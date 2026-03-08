@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import { DURUM_LISTESI, EGITIM_TURLERI, PARA_BIRIMLERI } from '../../data/constants'
@@ -37,6 +37,21 @@ function getDefaultInstitutionName(kurumListesi = []) {
 
 function getSelectionKey(row) {
   return `${row.talep.id}::${row.egitim.egitimId}`
+}
+
+function createDraftForPlanningRows(requestRows, egitmenListesi, kurumListesi, kurBilgileri, contextKey) {
+  const baseDraft = createPlanningDraft()
+
+  return {
+    ...baseDraft,
+    contextKey,
+    egitimci: baseDraft.icEgitim ? baseDraft.egitimci || getDefaultInternalTrainerName(egitmenListesi) : '',
+    kurum: baseDraft.icEgitim ? '' : getDefaultInstitutionName(kurumListesi),
+    dovizKuru:
+      baseDraft.maliyetParaBirimi === 'TRY'
+        ? 1
+        : Number(kurBilgileri?.[baseDraft.maliyetParaBirimi] || baseDraft.dovizKuru || 1),
+  }
 }
 
 function sortTrainingGroups(left, right) {
@@ -119,27 +134,33 @@ function TrainingPlanningModal({
   kurumListesi,
   kurBilgileri,
 }) {
-  const [draft, setDraft] = useState(createPlanningDraft())
-
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    setDraft((current) => ({
-      ...current,
-      egitimci: current.icEgitim
-        ? current.egitimci || getDefaultInternalTrainerName(egitmenListesi)
-        : '',
-      kurum: current.icEgitim
-        ? ''
-        : current.kurum || getDefaultInstitutionName(kurumListesi),
-      dovizKuru: current.maliyetParaBirimi === 'TRY' ? 1 : Number(kurBilgileri?.[current.maliyetParaBirimi] || current.dovizKuru || 1),
-    }))
-  }, [egitmenListesi, kurumListesi, kurBilgileri, open])
+  const contextKey = requestRows.length ? requestRows.map(getSelectionKey).join('|') : 'empty'
+  const [draft, setDraft] = useState(() =>
+    createDraftForPlanningRows(requestRows, egitmenListesi, kurumListesi, kurBilgileri, contextKey),
+  )
 
   if (!requestRows.length) {
     return null
+  }
+
+  const activeDraft =
+    draft.contextKey === contextKey
+      ? draft
+      : createDraftForPlanningRows(requestRows, egitmenListesi, kurumListesi, kurBilgileri, contextKey)
+
+  function updateDraft(updater) {
+    setDraft((current) => {
+      const baseDraft =
+        current.contextKey === contextKey
+          ? current
+          : createDraftForPlanningRows(requestRows, egitmenListesi, kurumListesi, kurBilgileri, contextKey)
+      const nextDraft = typeof updater === 'function' ? updater(baseDraft) : updater
+
+      return {
+        ...nextDraft,
+        contextKey,
+      }
+    })
   }
 
   const isBulk = requestRows.length > 1
@@ -148,17 +169,17 @@ function TrainingPlanningModal({
   function handleSave() {
     const ortakAlanlar = {
       planlanmaTarihi: new Date().toISOString().slice(0, 10),
-      egitimTarihi: draft.egitimTarihi,
-      egitimTuru: draft.egitimTuru,
-      sure: draft.sure,
-      icEgitim: draft.icEgitim,
-      egitimci: draft.icEgitim ? draft.egitimci : '',
-      kurum: draft.icEgitim ? '' : draft.kurum,
-      maliyet: draft.maliyet,
-      maliyetParaBirimi: draft.maliyetParaBirimi,
-      dovizKuru: draft.maliyetParaBirimi === 'TRY' ? 1 : Number(draft.dovizKuru || 1),
-      durum: draft.durum,
-      notlar: draft.notlar,
+      egitimTarihi: activeDraft.egitimTarihi,
+      egitimTuru: activeDraft.egitimTuru,
+      sure: activeDraft.sure,
+      icEgitim: activeDraft.icEgitim,
+      egitimci: activeDraft.icEgitim ? activeDraft.egitimci : '',
+      kurum: activeDraft.icEgitim ? '' : activeDraft.kurum,
+      maliyet: activeDraft.maliyet,
+      maliyetParaBirimi: activeDraft.maliyetParaBirimi,
+      dovizKuru: activeDraft.maliyetParaBirimi === 'TRY' ? 1 : Number(activeDraft.dovizKuru || 1),
+      durum: activeDraft.durum,
+      notlar: activeDraft.notlar,
     }
 
     try {
@@ -241,7 +262,7 @@ function TrainingPlanningModal({
       <div className="form-grid">
         <label>
           <span>Eğitim Türü</span>
-          <select value={draft.egitimTuru} onChange={(event) => setDraft({ ...draft, egitimTuru: event.target.value })}>
+          <select value={activeDraft.egitimTuru} onChange={(event) => updateDraft((current) => ({ ...current, egitimTuru: event.target.value }))}>
             {EGITIM_TURLERI.map((type) => (
               <option key={type} value={type}>
                 {type}
@@ -251,20 +272,20 @@ function TrainingPlanningModal({
         </label>
         <label>
           <span>Eğitim Tarihi</span>
-          <input type="date" value={draft.egitimTarihi} onChange={(event) => setDraft({ ...draft, egitimTarihi: event.target.value })} />
+          <input type="date" value={activeDraft.egitimTarihi} onChange={(event) => updateDraft((current) => ({ ...current, egitimTarihi: event.target.value }))} />
         </label>
         <label>
           <span>Süre</span>
-          <input value={draft.sure} onChange={(event) => setDraft({ ...draft, sure: event.target.value })} />
+          <input value={activeDraft.sure} onChange={(event) => updateDraft((current) => ({ ...current, sure: event.target.value }))} />
         </label>
         <label>
           <span>İç Eğitim</span>
           <div className="checkbox-card checkbox-card--inline">
             <input
               type="checkbox"
-              checked={draft.icEgitim}
+              checked={activeDraft.icEgitim}
               onChange={(event) =>
-                setDraft((current) => ({
+                updateDraft((current) => ({
                   ...current,
                   icEgitim: event.target.checked,
                   egitimci: event.target.checked ? current.egitimci || getDefaultInternalTrainerName(egitmenListesi) : '',
@@ -273,17 +294,17 @@ function TrainingPlanningModal({
               }
             />
             <div>
-              <strong>{draft.icEgitim ? 'İç eğitmen seçilecek' : 'Dış kurum seçilecek'}</strong>
-              <span>{draft.icEgitim ? 'Kurum alanı pasif, iç eğitmen listesi aktif.' : 'İç eğitmen alanı pasif, kurum listesi aktif.'}</span>
+              <strong>{activeDraft.icEgitim ? 'İç eğitmen seçilecek' : 'Dış kurum seçilecek'}</strong>
+              <span>{activeDraft.icEgitim ? 'Kurum alanı pasif, iç eğitmen listesi aktif.' : 'İç eğitmen alanı pasif, kurum listesi aktif.'}</span>
             </div>
           </div>
         </label>
         <label>
           <span>İç Eğitmen</span>
           <select
-              value={draft.egitimci}
-              disabled={!draft.icEgitim}
-              onChange={(event) => setDraft({ ...draft, egitimci: event.target.value })}
+              value={activeDraft.egitimci}
+              disabled={!activeDraft.icEgitim}
+              onChange={(event) => updateDraft((current) => ({ ...current, egitimci: event.target.value }))}
             >
               <option value="">İç eğitmen seçin</option>
               {egitmenListesi.map((trainer) => (
@@ -294,9 +315,9 @@ function TrainingPlanningModal({
         <label>
           <span>Kurum</span>
           <select
-              value={draft.kurum}
-              disabled={draft.icEgitim}
-              onChange={(event) => setDraft({ ...draft, kurum: event.target.value })}
+              value={activeDraft.kurum}
+              disabled={activeDraft.icEgitim}
+              onChange={(event) => updateDraft((current) => ({ ...current, kurum: event.target.value }))}
             >
               <option value="">Kurum seçin</option>
               {kurumListesi.map((institution) => (
@@ -306,7 +327,7 @@ function TrainingPlanningModal({
         </label>
         <label>
           <span>Durum</span>
-          <select value={draft.durum} onChange={(event) => setDraft({ ...draft, durum: event.target.value })}>
+          <select value={activeDraft.durum} onChange={(event) => updateDraft((current) => ({ ...current, durum: event.target.value }))}>
             {DURUM_LISTESI.map((status) => (
               <option key={status} value={status}>
                 {status}
@@ -316,14 +337,14 @@ function TrainingPlanningModal({
         </label>
         <label>
           <span>Maliyet</span>
-          <input type="number" min="0" value={draft.maliyet} onChange={(event) => setDraft({ ...draft, maliyet: Number(event.target.value) })} />
+          <input type="number" min="0" value={activeDraft.maliyet} onChange={(event) => updateDraft((current) => ({ ...current, maliyet: Number(event.target.value) }))} />
         </label>
         <label>
           <span>Para Birimi</span>
           <select
-            value={draft.maliyetParaBirimi}
+            value={activeDraft.maliyetParaBirimi}
             onChange={(event) =>
-              setDraft((current) => ({
+              updateDraft((current) => ({
                 ...current,
                 maliyetParaBirimi: event.target.value,
                 dovizKuru: event.target.value === 'TRY' ? 1 : Number(kurBilgileri?.[event.target.value] || current.dovizKuru || 1),
@@ -343,14 +364,14 @@ function TrainingPlanningModal({
             type="number"
             min="0"
             step="0.01"
-            value={draft.dovizKuru}
-            disabled={draft.maliyetParaBirimi === 'TRY'}
-            onChange={(event) => setDraft({ ...draft, dovizKuru: Number(event.target.value) })}
+            value={activeDraft.dovizKuru}
+            disabled={activeDraft.maliyetParaBirimi === 'TRY'}
+            onChange={(event) => updateDraft((current) => ({ ...current, dovizKuru: Number(event.target.value) }))}
           />
         </label>
         <label className="form-grid--full">
           <span>Notlar</span>
-          <textarea rows={4} value={draft.notlar} onChange={(event) => setDraft({ ...draft, notlar: event.target.value })} />
+          <textarea rows={4} value={activeDraft.notlar} onChange={(event) => updateDraft((current) => ({ ...current, notlar: event.target.value }))} />
         </label>
       </div>
     </Modal>
@@ -462,9 +483,10 @@ export default function EgitimPlaniPage({
   }, [selectedCategory, selectedPlanFilter, trainingGroups, trainingSearch, trainingSort])
 
   const trainingPageCount = getPageCount(filteredTrainingGroups.length, TRAINING_PAGE_SIZE)
+  const safeTrainingPage = Math.min(trainingPage, trainingPageCount)
   const paginatedTrainingGroups = useMemo(
-    () => paginate(filteredTrainingGroups, Math.min(trainingPage, trainingPageCount), TRAINING_PAGE_SIZE),
-    [filteredTrainingGroups, trainingPage, trainingPageCount],
+    () => paginate(filteredTrainingGroups, safeTrainingPage, TRAINING_PAGE_SIZE),
+    [filteredTrainingGroups, safeTrainingPage],
   )
 
   const activeTrainingName = filteredTrainingGroups.some((item) => item.trainingKey === selectedTrainingName)
@@ -524,9 +546,10 @@ export default function EgitimPlaniPage({
   }, [employeeSearch, requestRows, selectedEmployeeGmy, selectedEmployeeStatus])
 
   const employeePageCount = getPageCount(filteredRequestRows.length, EMPLOYEE_PAGE_SIZE)
+  const safeEmployeePage = Math.min(employeePage, employeePageCount)
   const paginatedRequestRows = useMemo(
-    () => paginate(filteredRequestRows, Math.min(employeePage, employeePageCount), EMPLOYEE_PAGE_SIZE),
-    [employeePage, employeePageCount, filteredRequestRows],
+    () => paginate(filteredRequestRows, safeEmployeePage, EMPLOYEE_PAGE_SIZE),
+    [filteredRequestRows, safeEmployeePage],
   )
 
   const filteredPendingRows = filteredRequestRows.filter((row) => !row.relatedPlan)
@@ -535,29 +558,46 @@ export default function EgitimPlaniPage({
   const allPendingSelected =
     filteredPendingRows.length > 0 && filteredPendingRows.every((row) => selectedRequestKeys.includes(getSelectionKey(row)))
 
-  useEffect(() => {
-    setTrainingPage(1)
-  }, [selectedCategory, selectedPlanFilter, trainingSearch, trainingSort])
-
-  useEffect(() => {
+  function handleSelectTraining(trainingKey) {
+    setSelectedTrainingName(trainingKey)
     setEmployeePage(1)
-  }, [employeeSearch, selectedEmployeeGmy, selectedEmployeeStatus, activeTrainingName])
-
-  useEffect(() => {
     setSelectedRequestKeys([])
-  }, [activeTrainingName])
+  }
 
-  useEffect(() => {
-    if (trainingPage > trainingPageCount) {
-      setTrainingPage(trainingPageCount)
-    }
-  }, [trainingPage, trainingPageCount])
+  function handleTrainingSearchChange(value) {
+    setTrainingSearch(value)
+    setTrainingPage(1)
+  }
 
-  useEffect(() => {
-    if (employeePage > employeePageCount) {
-      setEmployeePage(employeePageCount)
-    }
-  }, [employeePage, employeePageCount])
+  function handleCategoryChange(value) {
+    setSelectedCategory(value)
+    setTrainingPage(1)
+  }
+
+  function handlePlanFilterChange(value) {
+    setSelectedPlanFilter(value)
+    setTrainingPage(1)
+  }
+
+  function handleTrainingSortChange(value) {
+    setTrainingSort(value)
+    setTrainingPage(1)
+  }
+
+  function handleEmployeeSearchChange(value) {
+    setEmployeeSearch(value)
+    setEmployeePage(1)
+  }
+
+  function handleEmployeeGmyChange(value) {
+    setSelectedEmployeeGmy(value)
+    setEmployeePage(1)
+  }
+
+  function handleEmployeeStatusChange(value) {
+    setSelectedEmployeeStatus(value)
+    setEmployeePage(1)
+  }
 
   function handleToggleRow(row) {
     const key = getSelectionKey(row)
@@ -639,7 +679,7 @@ export default function EgitimPlaniPage({
                 </div>
                 <div className="planning-panel__summary">
                   <span>{`${filteredTrainingGroups.length} kayıt`}</span>
-                  <strong>{`Sayfa ${Math.min(trainingPage, trainingPageCount)} / ${trainingPageCount}`}</strong>
+                  <strong>{`Sayfa ${safeTrainingPage} / ${trainingPageCount}`}</strong>
                 </div>
               </div>
 
@@ -650,12 +690,12 @@ export default function EgitimPlaniPage({
                     type="search"
                     placeholder="Eğitim adı veya kodu ile ara"
                     value={trainingSearch}
-                    onChange={(event) => setTrainingSearch(event.target.value)}
+                    onChange={(event) => handleTrainingSearchChange(event.target.value)}
                   />
                 </label>
                 <label>
                   <span>Kategori</span>
-                  <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
+                  <select value={selectedCategory} onChange={(event) => handleCategoryChange(event.target.value)}>
                     {availableCategories.map((category) => (
                       <option key={category} value={category}>
                         {category}
@@ -665,7 +705,7 @@ export default function EgitimPlaniPage({
                 </label>
                 <label>
                   <span>Plan Durumu</span>
-                  <select value={selectedPlanFilter} onChange={(event) => setSelectedPlanFilter(event.target.value)}>
+                  <select value={selectedPlanFilter} onChange={(event) => handlePlanFilterChange(event.target.value)}>
                     <option value="Tümü">Tümü</option>
                     <option value="Bekleyenler">Bekleyenler</option>
                     <option value="Planlananlar">Planlananlar</option>
@@ -673,7 +713,7 @@ export default function EgitimPlaniPage({
                 </label>
                 <label>
                   <span>Sıralama</span>
-                  <select value={trainingSort} onChange={(event) => setTrainingSort(event.target.value)}>
+                  <select value={trainingSort} onChange={(event) => handleTrainingSortChange(event.target.value)}>
                     <option value="bekleyen">Bekleyen Talep</option>
                     <option value="toplam">Toplam Talep</option>
                     <option value="calisan">Çalışan Sayısı</option>
@@ -694,7 +734,7 @@ export default function EgitimPlaniPage({
                       <button
                         key={group.trainingKey}
                         className={`training-list-row ${activeTrainingName === group.trainingKey ? 'active' : ''}`.trim()}
-                        onClick={() => setSelectedTrainingName(group.trainingKey)}
+                        onClick={() => handleSelectTraining(group.trainingKey)}
                       >
                         <div className="training-list-row__title">
                           <strong>{getTrainingDisplayName(group)}</strong>
@@ -728,13 +768,13 @@ export default function EgitimPlaniPage({
                   </div>
 
                   <div className="pagination-bar">
-                    <button className="button button--secondary" disabled={trainingPage <= 1} onClick={() => setTrainingPage((page) => Math.max(1, page - 1))}>
+                    <button className="button button--secondary" disabled={safeTrainingPage <= 1} onClick={() => setTrainingPage((page) => Math.max(1, page - 1))}>
                       Önceki
                     </button>
-                    <span>{`Sayfa ${Math.min(trainingPage, trainingPageCount)} / ${trainingPageCount}`}</span>
+                    <span>{`Sayfa ${safeTrainingPage} / ${trainingPageCount}`}</span>
                     <button
                       className="button button--secondary"
-                      disabled={trainingPage >= trainingPageCount}
+                      disabled={safeTrainingPage >= trainingPageCount}
                       onClick={() => setTrainingPage((page) => Math.min(trainingPageCount, page + 1))}
                     >
                       Sonraki
@@ -793,12 +833,12 @@ export default function EgitimPlaniPage({
                         type="search"
                         placeholder="Çalışan adı, sicil, kullanıcı kodu"
                         value={employeeSearch}
-                        onChange={(event) => setEmployeeSearch(event.target.value)}
+                        onChange={(event) => handleEmployeeSearchChange(event.target.value)}
                       />
                     </label>
                     <label>
                       <span>GMY</span>
-                      <select value={selectedEmployeeGmy} onChange={(event) => setSelectedEmployeeGmy(event.target.value)}>
+                      <select value={selectedEmployeeGmy} onChange={(event) => handleEmployeeGmyChange(event.target.value)}>
                         {employeeGmyOptions.map((gmy) => (
                           <option key={gmy} value={gmy}>
                             {gmy}
@@ -808,7 +848,7 @@ export default function EgitimPlaniPage({
                     </label>
                     <label>
                       <span>Plan Durumu</span>
-                      <select value={selectedEmployeeStatus} onChange={(event) => setSelectedEmployeeStatus(event.target.value)}>
+                      <select value={selectedEmployeeStatus} onChange={(event) => handleEmployeeStatusChange(event.target.value)}>
                         <option value="Tümü">Tümü</option>
                         <option value="Bekleyenler">Bekleyenler</option>
                         <option value="Planlananlar">Planlananlar</option>
@@ -910,13 +950,13 @@ export default function EgitimPlaniPage({
                       </div>
 
                       <div className="pagination-bar pagination-bar--detail">
-                        <button className="button button--secondary" disabled={employeePage <= 1} onClick={() => setEmployeePage((page) => Math.max(1, page - 1))}>
+                        <button className="button button--secondary" disabled={safeEmployeePage <= 1} onClick={() => setEmployeePage((page) => Math.max(1, page - 1))}>
                           Önceki
                         </button>
-                        <span>{`Sayfa ${Math.min(employeePage, employeePageCount)} / ${employeePageCount}`}</span>
+                        <span>{`Sayfa ${safeEmployeePage} / ${employeePageCount}`}</span>
                         <button
                           className="button button--secondary"
-                          disabled={employeePage >= employeePageCount}
+                          disabled={safeEmployeePage >= employeePageCount}
                           onClick={() => setEmployeePage((page) => Math.min(employeePageCount, page + 1))}
                         >
                           Sonraki

@@ -33,16 +33,20 @@ export default function Sidebar({ isAdminAuthenticated }) {
       </div>
 
       <div className="sidebar-nav sidebar-nav--top">
-        {items.map(({ to, label, icon: Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`.trim()}
-          >
-            <Icon size={18} />
-            <span>{label}</span>
-          </NavLink>
-        ))}
+        {items.map((item) => {
+          const NavIcon = item.icon
+
+          return (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`.trim()}
+            >
+              <NavIcon size={18} />
+              <span>{item.label}</span>
+            </NavLink>
+          )
+        })}
       </div>
     </nav>
   )

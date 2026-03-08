@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'react-hot-toast'
+import { TALEP_KAYNAKLARI } from '../../data/constants'
 import Modal from '../ui/Modal'
 
 function createBlankEgitim(kategoriList) {
@@ -11,9 +12,10 @@ function createBlankEgitim(kategoriList) {
   }
 }
 
-function createInitialForm(gmyList, kategoriList) {
+function createInitialForm(gmyList, kategoriList, defaultTalepKaynagi) {
   return {
     talepYili: new Date().getFullYear(),
+    talepKaynagi: defaultTalepKaynagi || 'Yıllık Talep',
     yoneticiAdi: '',
     yoneticiEmail: '',
     gmy: gmyList[0] || '',
@@ -25,45 +27,35 @@ function createInitialForm(gmyList, kategoriList) {
   }
 }
 
-export default function TalepForm({ open, onOpenChange, katalog, gmyList, kategoriList, onSubmit, onIssues }) {
-  const [form, setForm] = useState(createInitialForm(gmyList, kategoriList))
+function normalizeFormForOptions(form, gmyList, kategoriList) {
+  return {
+    ...form,
+    gmy: gmyList.includes(form.gmy) ? form.gmy : gmyList[0] || '',
+    egitimler: form.egitimler.map((egitim) =>
+      kategoriList.includes(egitim.kategori)
+        ? egitim
+        : {
+            ...egitim,
+            kategori: kategoriList[0] || 'Teknik',
+          },
+    ),
+  }
+}
 
-  useEffect(() => {
-    if (!open) {
-      setForm(createInitialForm(gmyList, kategoriList))
-    }
-  }, [gmyList, kategoriList, open])
-
-  useEffect(() => {
-    if (!gmyList.length) {
-      return
-    }
-
-    if (!gmyList.includes(form.gmy)) {
-      setForm((current) => ({
-        ...current,
-        gmy: gmyList[0],
-      }))
-    }
-  }, [form.gmy, gmyList])
-
-  useEffect(() => {
-    if (!kategoriList.length) {
-      return
-    }
-
-    setForm((current) => ({
-      ...current,
-      egitimler: current.egitimler.map((egitim) =>
-        kategoriList.includes(egitim.kategori)
-          ? egitim
-          : {
-              ...egitim,
-              kategori: kategoriList[0],
-            },
-      ),
-    }))
-  }, [kategoriList])
+export default function TalepForm({
+  open,
+  onOpenChange,
+  katalog,
+  gmyList,
+  kategoriList,
+  onSubmit,
+  onIssues,
+  defaultTalepKaynagi = 'Yıllık Talep',
+  title = 'Yeni talep ekle',
+  description = 'Yöneticiden gelen talebi seçilen yıl için sisteme kaydedin',
+}) {
+  const [form, setForm] = useState(createInitialForm(gmyList, kategoriList, defaultTalepKaynagi))
+  const activeForm = normalizeFormForOptions(form, gmyList, kategoriList)
 
   function updateEgitim(index, field, value) {
     setForm((current) => {
@@ -101,7 +93,7 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, katego
     event.preventDefault()
 
     try {
-      const result = onSubmit(form)
+      const result = onSubmit(activeForm)
 
       if (result?.issues?.length) {
         onIssues?.(result.issues)
@@ -120,8 +112,8 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, katego
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Yeni talep ekle"
-      description="Yöneticiden gelen talebi seçilen yıl için sisteme kaydedin"
+      title={title}
+      description={description}
       footer={
         <>
           <button className="button button--secondary" onClick={() => onOpenChange(false)}>
@@ -149,22 +141,32 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, katego
                 type="number"
                 min="2024"
                 max="2100"
-                value={form.talepYili}
+                value={activeForm.talepYili}
                 onChange={(event) => setForm({ ...form, talepYili: Number(event.target.value) })}
                 required
               />
             </label>
             <label>
+              <span>Talep Kaynağı</span>
+              <select value={activeForm.talepKaynagi} onChange={(event) => setForm({ ...activeForm, talepKaynagi: event.target.value })}>
+                {TALEP_KAYNAKLARI.map((kaynak) => (
+                  <option key={kaynak} value={kaynak}>
+                    {kaynak}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label>
               <span>Yönetici Adı</span>
-              <input value={form.yoneticiAdi} onChange={(event) => setForm({ ...form, yoneticiAdi: event.target.value })} required />
+              <input value={activeForm.yoneticiAdi} onChange={(event) => setForm({ ...activeForm, yoneticiAdi: event.target.value })} required />
             </label>
             <label>
               <span>Yönetici E-posta</span>
-              <input type="email" value={form.yoneticiEmail} onChange={(event) => setForm({ ...form, yoneticiEmail: event.target.value })} required />
+              <input type="email" value={activeForm.yoneticiEmail} onChange={(event) => setForm({ ...activeForm, yoneticiEmail: event.target.value })} required />
             </label>
             <label>
               <span>GMY</span>
-              <select value={form.gmy} onChange={(event) => setForm({ ...form, gmy: event.target.value })}>
+              <select value={activeForm.gmy} onChange={(event) => setForm({ ...activeForm, gmy: event.target.value })}>
                 {gmyList.map((gmy) => (
                   <option key={gmy} value={gmy}>
                     {gmy}
@@ -185,15 +187,15 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, katego
           <div className="form-grid form-grid--section">
             <label>
               <span>Çalışan Adı</span>
-              <input value={form.calisanAdi} onChange={(event) => setForm({ ...form, calisanAdi: event.target.value })} required />
+              <input value={activeForm.calisanAdi} onChange={(event) => setForm({ ...activeForm, calisanAdi: event.target.value })} required />
             </label>
             <label>
               <span>Çalışan Sicil No</span>
-              <input value={form.calisanSicil} onChange={(event) => setForm({ ...form, calisanSicil: event.target.value })} required />
+              <input value={activeForm.calisanSicil} onChange={(event) => setForm({ ...activeForm, calisanSicil: event.target.value })} required />
             </label>
             <label>
               <span>Çalışan Kullanıcı Kodu</span>
-              <input value={form.calisanKullaniciKodu} onChange={(event) => setForm({ ...form, calisanKullaniciKodu: event.target.value })} required />
+              <input value={activeForm.calisanKullaniciKodu} onChange={(event) => setForm({ ...activeForm, calisanKullaniciKodu: event.target.value })} required />
             </label>
           </div>
         </section>
@@ -207,8 +209,8 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, katego
             <button
               type="button"
               className="button button--secondary"
-              disabled={form.egitimler.length >= 4}
-              onClick={() => setForm({ ...form, egitimler: [...form.egitimler, createBlankEgitim(kategoriList)] })}
+              disabled={activeForm.egitimler.length >= 4}
+              onClick={() => setForm({ ...activeForm, egitimler: [...activeForm.egitimler, createBlankEgitim(kategoriList)] })}
             >
               + Eğitim Ekle
             </button>
@@ -221,48 +223,48 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, katego
           </datalist>
 
           <div className="education-list">
-            {form.egitimler.map((egitim, index) => (
+            {activeForm.egitimler.map((egitim, index) => (
               <div key={`${egitim.egitimAdi}-${index}`} className="education-row">
-              <label>
-                <span>Eğitim Kodu</span>
-                <input
-                  value={egitim.egitimKodu}
-                  onChange={(event) => updateEgitim(index, 'egitimKodu', event.target.value.toUpperCase())}
-                  placeholder="Örn. TE_001"
-                />
-              </label>
-              <label>
-                <span>Eğitim Adı</span>
-                <input
-                  list="catalog-options"
-                  value={egitim.egitimAdi}
-                  onChange={(event) => updateEgitim(index, 'egitimAdi', event.target.value)}
-                  required
-                />
-              </label>
-              <label>
-                <span>Kategori</span>
-                <select value={egitim.kategori} onChange={(event) => updateEgitim(index, 'kategori', event.target.value)}>
-                  {kategoriList.map((kategori) => (
-                    <option key={kategori} value={kategori}>
-                      {kategori}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <button
-                type="button"
-                className="button button--ghost"
-                disabled={form.egitimler.length === 1}
-                onClick={() =>
-                  setForm({
-                    ...form,
-                    egitimler: form.egitimler.filter((_, itemIndex) => itemIndex !== index),
-                  })
-                }
-              >
-                Kaldır
-              </button>
+                <label>
+                  <span>Eğitim Kodu</span>
+                  <input
+                    value={egitim.egitimKodu}
+                    onChange={(event) => updateEgitim(index, 'egitimKodu', event.target.value.toUpperCase())}
+                    placeholder="Örn. TE_001"
+                  />
+                </label>
+                <label>
+                  <span>Eğitim Adı</span>
+                  <input
+                    list="catalog-options"
+                    value={egitim.egitimAdi}
+                    onChange={(event) => updateEgitim(index, 'egitimAdi', event.target.value)}
+                    required
+                  />
+                </label>
+                <label>
+                  <span>Kategori</span>
+                  <select value={egitim.kategori} onChange={(event) => updateEgitim(index, 'kategori', event.target.value)}>
+                    {kategoriList.map((kategori) => (
+                      <option key={kategori} value={kategori}>
+                        {kategori}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <button
+                  type="button"
+                  className="button button--ghost"
+                  disabled={activeForm.egitimler.length === 1}
+                  onClick={() =>
+                    setForm({
+                      ...activeForm,
+                      egitimler: activeForm.egitimler.filter((_, itemIndex) => itemIndex !== index),
+                    })
+                  }
+                >
+                  Kaldır
+                </button>
               </div>
             ))}
           </div>
@@ -271,7 +273,7 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, katego
         <section className="form-section">
           <label>
             <span>Notlar</span>
-            <textarea value={form.notlar} onChange={(event) => setForm({ ...form, notlar: event.target.value })} rows={4} />
+            <textarea value={activeForm.notlar} onChange={(event) => setForm({ ...activeForm, notlar: event.target.value })} rows={4} />
           </label>
         </section>
       </form>

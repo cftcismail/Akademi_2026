@@ -1,18 +1,24 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { format } from 'date-fns'
 import {
   EGITIM_KATEGORILERI,
   GMY_LISTESI,
-  LOCAL_STORAGE_KEYS,
   PARA_BIRIMLERI,
   VARSAYILAN_KURUMLAR,
   VARSAYILAN_EGITMENLER,
   VARSAYILAN_KURLAR,
 } from '../data/constants'
 import { initialCatalog, initialPlanlar, initialTalepler } from '../data/initialData'
+import {
+  fetchRemoteAppState,
+  hasMeaningfulAppState,
+  isRemoteSyncEnabled,
+  readLocalAppState,
+  replaceRemoteAppState,
+  writeLocalAppState,
+} from '../services/appStateApi'
 import { buildTalepDuplicateKey, normalizeSignatureText } from '../utils/helpers'
-import useLocalStorage from './useLocalStorage'
 
 function getToday() {
   return format(new Date(), 'yyyy-MM-dd')
@@ -78,6 +84,7 @@ function normalizeTalep(talep) {
   return {
     id: talep.id,
     talepYili: Number(talep.talepYili || getCurrentYear()),
+    talepKaynagi: `${talep.talepKaynagi || 'Yıllık Talep'}`.trim() || 'Yıllık Talep',
     yoneticiAdi: talep.yoneticiAdi || '',
     yoneticiEmail: talep.yoneticiEmail || '',
     gmy: talep.gmy || '',
@@ -287,6 +294,7 @@ function syncKategoriEntries(currentKategoriList, egitimler) {
 function isEmptyTalepPayload(payload) {
   return ![
     payload.talepYili,
+    payload.talepKaynagi,
     payload.yoneticiAdi,
     payload.yoneticiEmail,
     payload.gmy,
@@ -344,6 +352,7 @@ function createTalepRecord(payload) {
   const talep = {
     id: uuidv4(),
     talepYili: Number(payload.talepYili || getCurrentYear()),
+    talepKaynagi: `${payload.talepKaynagi || 'Yıllık Talep'}`.trim() || 'Yıllık Talep',
     yoneticiAdi: `${payload.yoneticiAdi || ''}`.trim(),
     yoneticiEmail: `${payload.yoneticiEmail || ''}`.trim(),
     gmy: `${payload.gmy || ''}`.trim(),
@@ -407,24 +416,157 @@ function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlan
     }))
 }
 
+const DEFAULT_APP_STATE = {
+  katalog: initialCatalog,
+  talepler: initialTalepler,
+  planlar: initialPlanlar,
+  gmyList: GMY_LISTESI,
+  egitimKategorileri: EGITIM_KATEGORILERI,
+  kurumListesi: VARSAYILAN_KURUMLAR,
+  egitmenListesi: VARSAYILAN_EGITMENLER,
+  kurBilgileri: VARSAYILAN_KURLAR,
+}
+
 export default function useEgitimData() {
-  const [katalog, setKatalog] = useLocalStorage(LOCAL_STORAGE_KEYS.katalog, initialCatalog)
-  const [talepler, setTalepler] = useLocalStorage(LOCAL_STORAGE_KEYS.talepler, initialTalepler)
-  const [planlar, setPlanlar] = useLocalStorage(LOCAL_STORAGE_KEYS.planlar, initialPlanlar)
-  const [gmyList, setGmyList] = useLocalStorage(LOCAL_STORAGE_KEYS.gmyList, GMY_LISTESI)
-  const [egitimKategorileri, setEgitimKategorileri] = useLocalStorage(
-    LOCAL_STORAGE_KEYS.egitimKategorileri,
-    EGITIM_KATEGORILERI,
+  const initialLocalStateRef = useRef(null)
+
+  if (!initialLocalStateRef.current) {
+    initialLocalStateRef.current = readLocalAppState(DEFAULT_APP_STATE)
+  }
+
+  const [katalog, setKatalog] = useState(initialLocalStateRef.current.katalog)
+  const [talepler, setTalepler] = useState(initialLocalStateRef.current.talepler)
+  const [planlar, setPlanlar] = useState(initialLocalStateRef.current.planlar)
+  const [gmyList, setGmyList] = useState(initialLocalStateRef.current.gmyList)
+  const [egitimKategorileri, setEgitimKategorileri] = useState(initialLocalStateRef.current.egitimKategorileri)
+  const [kurumListesi, setKurumListesi] = useState(initialLocalStateRef.current.kurumListesi)
+  const [egitmenListesi, setEgitmenListesi] = useState(initialLocalStateRef.current.egitmenListesi)
+  const [kurBilgileri, setKurBilgileri] = useState(initialLocalStateRef.current.kurBilgileri)
+  const [syncStatus, setSyncStatus] = useState({
+    isLoading: isRemoteSyncEnabled(),
+    mode: isRemoteSyncEnabled() ? 'remote' : 'local',
+    error: '',
+  })
+  const hasHydratedRef = useRef(false)
+  const lastSyncedStateRef = useRef('')
+
+  const appStateSnapshot = useMemo(
+    () => ({
+      katalog,
+      talepler,
+      planlar,
+      gmyList,
+      egitimKategorileri,
+      kurumListesi,
+      egitmenListesi,
+      kurBilgileri,
+    }),
+    [katalog, talepler, planlar, gmyList, egitimKategorileri, kurumListesi, egitmenListesi, kurBilgileri],
   )
-  const [kurumListesi, setKurumListesi] = useLocalStorage(
-    LOCAL_STORAGE_KEYS.kurumListesi,
-    VARSAYILAN_KURUMLAR,
-  )
-  const [egitmenListesi, setEgitmenListesi] = useLocalStorage(
-    LOCAL_STORAGE_KEYS.egitmenListesi,
-    VARSAYILAN_EGITMENLER,
-  )
-  const [kurBilgileri, setKurBilgileri] = useLocalStorage(LOCAL_STORAGE_KEYS.kurBilgileri, VARSAYILAN_KURLAR)
+  const serializedAppState = useMemo(() => JSON.stringify(appStateSnapshot), [appStateSnapshot])
+
+  function applyAppStateSnapshot(snapshot) {
+    setKatalog(snapshot.katalog)
+    setTalepler(snapshot.talepler)
+    setPlanlar(snapshot.planlar)
+    setGmyList(snapshot.gmyList)
+    setEgitimKategorileri(snapshot.egitimKategorileri)
+    setKurumListesi(snapshot.kurumListesi)
+    setEgitmenListesi(snapshot.egitmenListesi)
+    setKurBilgileri(snapshot.kurBilgileri)
+  }
+
+  useEffect(() => {
+    let isCancelled = false
+
+    async function hydrateFromRemote() {
+      if (!isRemoteSyncEnabled()) {
+        hasHydratedRef.current = true
+        setSyncStatus({
+          isLoading: false,
+          mode: 'local',
+          error: '',
+        })
+        return
+      }
+
+      try {
+        const remoteState = await fetchRemoteAppState(DEFAULT_APP_STATE)
+        const localState = initialLocalStateRef.current
+        const shouldPromoteLocalState =
+          !hasMeaningfulAppState(remoteState, DEFAULT_APP_STATE) && hasMeaningfulAppState(localState, DEFAULT_APP_STATE)
+        const activeState = shouldPromoteLocalState
+          ? await replaceRemoteAppState(localState, DEFAULT_APP_STATE)
+          : remoteState
+
+        if (isCancelled) {
+          return
+        }
+
+        applyAppStateSnapshot(activeState)
+        lastSyncedStateRef.current = JSON.stringify(activeState)
+        hasHydratedRef.current = true
+        setSyncStatus({
+          isLoading: false,
+          mode: 'remote',
+          error: '',
+        })
+      } catch (error) {
+        if (isCancelled) {
+          return
+        }
+
+        hasHydratedRef.current = true
+        setSyncStatus({
+          isLoading: false,
+          mode: 'local',
+          error: error.message || 'Merkezi veri servisine ulaşılamadı.',
+        })
+      }
+    }
+
+    hydrateFromRemote()
+
+    return () => {
+      isCancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    writeLocalAppState(appStateSnapshot, DEFAULT_APP_STATE)
+  }, [appStateSnapshot, serializedAppState])
+
+  useEffect(() => {
+    if (!hasHydratedRef.current || !isRemoteSyncEnabled()) {
+      return undefined
+    }
+
+    if (serializedAppState === lastSyncedStateRef.current) {
+      return undefined
+    }
+
+    const syncTimer = window.setTimeout(async () => {
+      try {
+        const persistedState = await replaceRemoteAppState(appStateSnapshot, DEFAULT_APP_STATE)
+        lastSyncedStateRef.current = JSON.stringify(persistedState)
+        setSyncStatus((current) => ({
+          ...current,
+          mode: 'remote',
+          error: '',
+        }))
+      } catch (error) {
+        setSyncStatus((current) => ({
+          ...current,
+          mode: 'local',
+          error: error.message || 'Merkezi veri servisine ulaşılamadı.',
+        }))
+      }
+    }, 250)
+
+    return () => {
+      window.clearTimeout(syncTimer)
+    }
+  }, [appStateSnapshot, serializedAppState])
 
   useEffect(() => {
     setGmyList((current) => {
@@ -1238,6 +1380,7 @@ export default function useEgitimData() {
     kurumListesi,
     egitmenListesi,
     kurBilgileri,
+    syncStatus,
     addTalep,
     importTalepler,
     planTalep,

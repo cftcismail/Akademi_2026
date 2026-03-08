@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { DURUM_LISTESI, EGITIM_TURLERI, PARA_BIRIMLERI } from '../../data/constants'
 import { formatEgitimLabel } from '../../utils/helpers'
@@ -30,34 +30,54 @@ function getDefaultInstitutionName(kurumListesi = []) {
   return kurumListesi[0]?.ad || ''
 }
 
-export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egitmenListesi, kurumListesi, kurBilgileri }) {
-  const [form, setForm] = useState(createInitialForm())
+function createFormForTalep(talep, egitmenListesi, kurumListesi, kurBilgileri, contextKey) {
+  const baseForm = createInitialForm()
 
-  useEffect(() => {
-    if (open && talep) {
-      setForm((current) => ({
-        ...current,
-        selectedEgitimIds: talep.egitimler.map((egitim) => egitim.egitimId),
-        egitimci: current.icEgitim
-          ? current.egitimci || getDefaultInternalTrainerName(egitmenListesi)
-          : '',
-        kurum: current.icEgitim
-          ? ''
-          : current.kurum || getDefaultInstitutionName(kurumListesi),
-        dovizKuru:
-          current.maliyetParaBirimi === 'TRY'
-            ? 1
-            : Number(kurBilgileri?.[current.maliyetParaBirimi] || current.dovizKuru || 1),
-      }))
-    }
-  }, [egitmenListesi, kurumListesi, kurBilgileri, open, talep])
+  return {
+    ...baseForm,
+    contextKey,
+    selectedEgitimIds: talep?.egitimler?.map((egitim) => egitim.egitimId) || [],
+    egitimci: baseForm.icEgitim ? baseForm.egitimci || getDefaultInternalTrainerName(egitmenListesi) : '',
+    kurum: baseForm.icEgitim ? '' : getDefaultInstitutionName(kurumListesi),
+    dovizKuru:
+      baseForm.maliyetParaBirimi === 'TRY'
+        ? 1
+        : Number(kurBilgileri?.[baseForm.maliyetParaBirimi] || baseForm.dovizKuru || 1),
+  }
+}
+
+export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egitmenListesi, kurumListesi, kurBilgileri }) {
+  const contextKey = talep ? `${talep.id}:${open ? 'open' : 'closed'}` : 'empty'
+  const [form, setForm] = useState(() =>
+    createFormForTalep(talep, egitmenListesi, kurumListesi, kurBilgileri, contextKey),
+  )
 
   if (!talep) {
     return null
   }
 
+  const activeForm =
+    form.contextKey === contextKey
+      ? form
+      : createFormForTalep(talep, egitmenListesi, kurumListesi, kurBilgileri, contextKey)
+
+  function updateForm(updater) {
+    setForm((current) => {
+      const baseForm =
+        current.contextKey === contextKey
+          ? current
+          : createFormForTalep(talep, egitmenListesi, kurumListesi, kurBilgileri, contextKey)
+      const nextForm = typeof updater === 'function' ? updater(baseForm) : updater
+
+      return {
+        ...nextForm,
+        contextKey,
+      }
+    })
+  }
+
   function handleToggle(egitimId) {
-    setForm((current) => ({
+    updateForm((current) => ({
       ...current,
       selectedEgitimIds: current.selectedEgitimIds.includes(egitimId)
         ? current.selectedEgitimIds.filter((item) => item !== egitimId)
@@ -69,25 +89,24 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
     try {
       onSubmit({
         talepId: talep.id,
-        selectedEgitimIds: form.selectedEgitimIds,
+        selectedEgitimIds: activeForm.selectedEgitimIds,
         ortakAlanlar: {
-          planlanmaTarihi: form.planlanmaTarihi,
-          egitimTarihi: form.egitimTarihi,
-          egitimTuru: form.egitimTuru,
-          sure: form.sure,
-          icEgitim: form.icEgitim,
-          egitimci: form.icEgitim ? form.egitimci : '',
-          kurum: form.icEgitim ? '' : form.kurum,
-          maliyet: form.maliyet,
-          maliyetParaBirimi: form.maliyetParaBirimi,
-          dovizKuru: form.maliyetParaBirimi === 'TRY' ? 1 : Number(form.dovizKuru || 1),
-          durum: form.durum,
-          notlar: form.notlar,
+          planlanmaTarihi: activeForm.planlanmaTarihi,
+          egitimTarihi: activeForm.egitimTarihi,
+          egitimTuru: activeForm.egitimTuru,
+          sure: activeForm.sure,
+          icEgitim: activeForm.icEgitim,
+          egitimci: activeForm.icEgitim ? activeForm.egitimci : '',
+          kurum: activeForm.icEgitim ? '' : activeForm.kurum,
+          maliyet: activeForm.maliyet,
+          maliyetParaBirimi: activeForm.maliyetParaBirimi,
+          dovizKuru: activeForm.maliyetParaBirimi === 'TRY' ? 1 : Number(activeForm.dovizKuru || 1),
+          durum: activeForm.durum,
+          notlar: activeForm.notlar,
         },
       })
       toast.success('Talep eğitim planına eklendi.')
       onOpenChange(false)
-      setForm(createInitialForm())
     } catch (error) {
       toast.error(error.message)
     }
@@ -140,7 +159,7 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
           <label key={egitim.egitimId} className="checkbox-card">
             <input
               type="checkbox"
-              checked={form.selectedEgitimIds.includes(egitim.egitimId)}
+              checked={activeForm.selectedEgitimIds.includes(egitim.egitimId)}
               onChange={() => handleToggle(egitim.egitimId)}
             />
             <div>
@@ -154,15 +173,15 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
       <div className="form-grid">
         <label>
           <span>Planlanma Tarihi</span>
-          <input type="date" value={form.planlanmaTarihi} onChange={(event) => setForm({ ...form, planlanmaTarihi: event.target.value })} />
+          <input type="date" value={activeForm.planlanmaTarihi} onChange={(event) => updateForm((current) => ({ ...current, planlanmaTarihi: event.target.value }))} />
         </label>
         <label>
           <span>Eğitim Tarihi</span>
-          <input type="date" value={form.egitimTarihi} onChange={(event) => setForm({ ...form, egitimTarihi: event.target.value })} />
+          <input type="date" value={activeForm.egitimTarihi} onChange={(event) => updateForm((current) => ({ ...current, egitimTarihi: event.target.value }))} />
         </label>
         <label>
           <span>Eğitim Türü</span>
-          <select value={form.egitimTuru} onChange={(event) => setForm({ ...form, egitimTuru: event.target.value })}>
+          <select value={activeForm.egitimTuru} onChange={(event) => updateForm((current) => ({ ...current, egitimTuru: event.target.value }))}>
             {EGITIM_TURLERI.map((type) => (
               <option key={type} value={type}>
                 {type}
@@ -172,16 +191,16 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
         </label>
         <label>
           <span>Süre</span>
-          <input value={form.sure} onChange={(event) => setForm({ ...form, sure: event.target.value })} />
+          <input value={activeForm.sure} onChange={(event) => updateForm((current) => ({ ...current, sure: event.target.value }))} />
         </label>
         <label>
           <span>İç Eğitim</span>
           <div className="checkbox-card checkbox-card--inline">
             <input
               type="checkbox"
-              checked={form.icEgitim}
+              checked={activeForm.icEgitim}
               onChange={(event) =>
-                setForm((current) => ({
+                updateForm((current) => ({
                   ...current,
                   icEgitim: event.target.checked,
                   egitimci: event.target.checked ? current.egitimci || getDefaultInternalTrainerName(egitmenListesi) : '',
@@ -190,17 +209,17 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
               }
             />
             <div>
-              <strong>{form.icEgitim ? 'İç eğitmen listesi aktif' : 'Kurum listesi aktif'}</strong>
-              <span>{form.icEgitim ? 'Kurum alanı pasif.' : 'İç eğitmen alanı pasif.'}</span>
+              <strong>{activeForm.icEgitim ? 'İç eğitmen listesi aktif' : 'Kurum listesi aktif'}</strong>
+              <span>{activeForm.icEgitim ? 'Kurum alanı pasif.' : 'İç eğitmen alanı pasif.'}</span>
             </div>
           </div>
         </label>
         <label>
           <span>İç Eğitmen</span>
           <select
-              value={form.egitimci}
-              disabled={!form.icEgitim}
-              onChange={(event) => setForm({ ...form, egitimci: event.target.value })}
+              value={activeForm.egitimci}
+              disabled={!activeForm.icEgitim}
+              onChange={(event) => updateForm((current) => ({ ...current, egitimci: event.target.value }))}
             >
               <option value="">İç eğitmen seçin</option>
               {(egitmenListesi || []).map((trainer) => (
@@ -211,9 +230,9 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
         <label>
           <span>Kurum</span>
           <select
-              value={form.kurum}
-              disabled={form.icEgitim}
-              onChange={(event) => setForm({ ...form, kurum: event.target.value })}
+              value={activeForm.kurum}
+              disabled={activeForm.icEgitim}
+              onChange={(event) => updateForm((current) => ({ ...current, kurum: event.target.value }))}
             >
               <option value="">Kurum seçin</option>
               {(kurumListesi || []).map((institution) => (
@@ -223,7 +242,7 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
         </label>
         <label>
           <span>Durum</span>
-          <select value={form.durum} onChange={(event) => setForm({ ...form, durum: event.target.value })}>
+          <select value={activeForm.durum} onChange={(event) => updateForm((current) => ({ ...current, durum: event.target.value }))}>
             {DURUM_LISTESI.map((status) => (
               <option key={status} value={status}>
                 {status}
@@ -233,14 +252,14 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
         </label>
         <label>
           <span>Maliyet</span>
-          <input type="number" min="0" value={form.maliyet} onChange={(event) => setForm({ ...form, maliyet: Number(event.target.value) })} />
+          <input type="number" min="0" value={activeForm.maliyet} onChange={(event) => updateForm((current) => ({ ...current, maliyet: Number(event.target.value) }))} />
         </label>
         <label>
           <span>Para Birimi</span>
           <select
-            value={form.maliyetParaBirimi}
+            value={activeForm.maliyetParaBirimi}
             onChange={(event) =>
-              setForm((current) => ({
+              updateForm((current) => ({
                 ...current,
                 maliyetParaBirimi: event.target.value,
                 dovizKuru:
@@ -263,14 +282,14 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
             type="number"
             min="0"
             step="0.01"
-            disabled={form.maliyetParaBirimi === 'TRY'}
-            value={form.dovizKuru}
-            onChange={(event) => setForm({ ...form, dovizKuru: Number(event.target.value) })}
+            disabled={activeForm.maliyetParaBirimi === 'TRY'}
+            value={activeForm.dovizKuru}
+            onChange={(event) => updateForm((current) => ({ ...current, dovizKuru: Number(event.target.value) }))}
           />
         </label>
         <label className="form-grid--full">
           <span>Notlar</span>
-          <textarea value={form.notlar} onChange={(event) => setForm({ ...form, notlar: event.target.value })} rows={3} />
+          <textarea value={activeForm.notlar} onChange={(event) => updateForm((current) => ({ ...current, notlar: event.target.value }))} rows={3} />
         </label>
       </div>
     </Modal>

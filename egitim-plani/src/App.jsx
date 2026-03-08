@@ -37,6 +37,20 @@ function App() {
     window.sessionStorage.removeItem(ADMIN_SESSION_KEY)
   }
 
+  if (egitimData.syncStatus.isLoading) {
+    return (
+      <AppErrorBoundary>
+        <div className="app-shell app-shell--topnav">
+          <div className="app-main app-main--topnav">
+            <main className="page-shell">
+              <div className="surface-card page-loading">Merkezi veri servisi yükleniyor...</div>
+            </main>
+          </div>
+        </div>
+      </AppErrorBoundary>
+    )
+  }
+
   return (
     <AppErrorBoundary>
       <div className="app-shell app-shell--topnav">

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { addDays, differenceInCalendarDays, parseISO } from 'date-fns'
 import { Download } from 'lucide-react'
@@ -18,6 +18,8 @@ import {
   formatEgitimLabel,
   getPlanCostInTry,
   getPlanProviderLabel,
+  getTalepKaynagiLabel,
+  summarizeDemandCoverage,
   getUniqueYears,
 } from '../../utils/helpers'
 import { downloadElementAsPdf } from '../../utils/pdfExport'
@@ -66,8 +68,9 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
   }
 
   const pendingRequestCount = currentYearRequests.filter((talep) => talep.durum === 'beklemede').length
-  const plannedRequestCount = currentYearRequests.filter((talep) => talep.durum === 'plana_eklendi').length
-  const conversionRate = currentYearRequests.length ? (plannedRequestCount / currentYearRequests.length) * 100 : 0
+  const annualRequestCount = currentYearRequests.filter((talep) => getTalepKaynagiLabel(talep) === 'Yıllık Talep').length
+  const individualRequestCount = currentYearRequests.filter((talep) => getTalepKaynagiLabel(talep) === 'Bireysel Talep').length
+  const demandSummary = summarizeDemandCoverage(currentYearRequests, filteredPlans)
   const completionCount = filteredPlans.filter((plan) => plan.durum === 'tamamlandı').length
   const completionRate = filteredPlans.length ? (completionCount / filteredPlans.length) * 100 : 0
   const totalBudget = filteredPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)
@@ -90,9 +93,9 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
       meta: `${currentYearRequests.length} toplam talep içinde`,
     },
     {
-      label: 'Dönüşüm Oranı',
-      value: formatPercent(conversionRate),
-      meta: `${plannedRequestCount} talep planlandı`,
+      label: 'Yıllık Talep Karşılama',
+      value: formatPercent(demandSummary.annualCoverageRate),
+      meta: `${demandSummary.annualCoveredDemandCount}/${demandSummary.annualDemandCount} eğitim talebi planlandı`,
     },
     {
       label: 'Tamamlanma Oranı',
@@ -110,6 +113,11 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
         return planDate >= today && planDate <= nextThirtyDays
       }).length,
       meta: 'Yaklaşan eğitim sayısı',
+    },
+    {
+      label: 'Plan Dışı Planlama',
+      value: demandSummary.externalPlannedCount,
+      meta: `${demandSummary.externalPlannedTitleCount} başlık yıllık talep dışı`,
     },
     {
       label: 'Toplam Bütçe',
@@ -135,19 +143,19 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
 
   const comparisonCards = [
     {
-      label: `${activeYear} Talep`,
-      current: currentYearRequests.length,
-      meta: `${plannedRequestCount} talep planlandı`,
+      label: `${activeYear} Yıllık Talep`,
+      current: annualRequestCount,
+      meta: `${demandSummary.annualRequestTitleCount} eğitim başlığı talep edildi`,
     },
     {
-      label: `${activeYear} Plan`,
-      current: filteredPlans.length,
-      meta: `${completionCount} plan tamamlandı`,
+      label: `${activeYear} Bireysel Talep`,
+      current: individualRequestCount,
+      meta: `${demandSummary.individualDemandCount} eğitim ihtiyacı, ${demandSummary.individualPlannedCount} plan`,
     },
     {
-      label: 'Toplam Bütçe',
-      current: formatCurrency(totalBudget),
-      meta: `${formatCurrency(averageBudget)} ortalama bütçe`,
+      label: 'Yıllık Talep Dışı Plan',
+      current: demandSummary.externalPlannedCount,
+      meta: `${demandSummary.externalPlannedTitleCount} eğitim başlığı yıllık talepte yok`,
     },
   ]
 
@@ -205,58 +213,28 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
     .sort((left, right) => right.talepSayisi - left.talepSayisi)
     .slice(0, 10)
 
-  const demandByCategory = useMemo(
-    () =>
-      Object.values(
-        currentYearRequests.flatMap((talep) => talep.egitimler).reduce((accumulator, egitim) => {
-          if (!accumulator[egitim.kategori]) {
-            accumulator[egitim.kategori] = {
-              kategori: egitim.kategori,
-              talep: 0,
-              plan: 0,
-            }
-          }
-
-          accumulator[egitim.kategori].talep += 1
-          return accumulator
-        }, {}),
-      )
-        .map((item) => ({
-          ...item,
-          plan: filteredPlans.filter((plan) => plan.kategori === item.kategori).length,
-        }))
-        .sort((left, right) => right.talep - left.talep),
-    [currentYearRequests, filteredPlans],
-  )
-
-  const demandCoverage = Object.values(
+  const demandByCategory = Object.values(
     currentYearRequests.flatMap((talep) => talep.egitimler).reduce((accumulator, egitim) => {
-      const trainingKey = `${egitim.egitimKodu || ''}::${egitim.egitimAdi}`
-
-      if (!accumulator[trainingKey]) {
-        accumulator[trainingKey] = {
-          egitimKodu: egitim.egitimKodu || '',
-          egitimAdi: egitim.egitimAdi,
+      if (!accumulator[egitim.kategori]) {
+        accumulator[egitim.kategori] = {
           kategori: egitim.kategori,
           talep: 0,
           plan: 0,
         }
       }
 
-      accumulator[trainingKey].talep += 1
+      accumulator[egitim.kategori].talep += 1
       return accumulator
     }, {}),
   )
     .map((item) => ({
       ...item,
-      plan: filteredPlans.filter((plan) => plan.egitimAdi === item.egitimAdi && (plan.egitimKodu || '') === (item.egitimKodu || '')).length,
+      plan: filteredPlans.filter((plan) => plan.kategori === item.kategori).length,
     }))
-    .map((item) => ({
-      ...item,
-      acik: Math.max(item.talep - item.plan, 0),
-    }))
-    .sort((left, right) => right.acik - left.acik || right.talep - left.talep)
-    .slice(0, 8)
+    .sort((left, right) => right.talep - left.talep)
+
+  const demandCoverage = demandSummary.annualCoverageRows.slice(0, 8)
+  const externalPlans = demandSummary.externalPlanRows.slice(0, 8)
 
   const upcomingPlans = filteredPlans
     .filter((plan) => {
@@ -515,7 +493,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
           <div className="section-heading">
             <div>
               <h3>Talep Açığı En Yüksek Eğitimler</h3>
-              <p>Talep sayısı yüksek olup plan karşılığı geride kalan başlıklar</p>
+              <p>Yıllık talep başlıkları içinde plan karşılama oranı en düşük kalan eğitimler</p>
             </div>
           </div>
           <div className="table-wrapper">
@@ -524,8 +502,9 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
                 <tr>
                   <th>Eğitim</th>
                   <th>Kategori</th>
-                  <th>Talep</th>
-                  <th>Plan</th>
+                  <th>Yıllık Talep</th>
+                  <th>Karşılanan</th>
+                  <th>Karşılama</th>
                   <th>Açık</th>
                 </tr>
               </thead>
@@ -536,9 +515,47 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
                     <td>{item.kategori}</td>
                     <td>{item.talep}</td>
                     <td>{item.plan}</td>
+                    <td>{formatPercent(item.coverageRate)}</td>
                     <td>{item.acik}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </section>
+
+      <section className="dashboard-grid dashboard-grid--bottom">
+        <Card className="chart-card">
+          <div className="section-heading">
+            <div>
+              <h3>Yıllık Talep Dışı Planlanan Eğitimler</h3>
+              <p>Yıllık talep havuzunda olmayan ama yıl içinde ayrıca planlanan başlıklar</p>
+            </div>
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Eğitim</th>
+                  <th>Kategori</th>
+                  <th>Plan</th>
+                </tr>
+              </thead>
+              <tbody>
+                {externalPlans.length ? (
+                  externalPlans.map((item) => (
+                    <tr key={`${item.egitimKodu || ''}-${item.egitimAdi}`}>
+                      <td>{formatEgitimLabel(item)}</td>
+                      <td>{item.kategori}</td>
+                      <td>{item.plan}</td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={3}>Seçili yıl için yıllık talep dışı plan bulunmuyor.</td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>

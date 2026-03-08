@@ -1361,6 +1361,7 @@ export default function AdminPage({
       </div>
 
       <TalepForm
+        key={showTalepForm ? 'talep-form-open' : 'talep-form-closed'}
         open={showTalepForm}
         onOpenChange={setShowTalepForm}
         katalog={katalog}
@@ -1368,6 +1369,7 @@ export default function AdminPage({
         kategoriList={egitimKategorileri}
         onSubmit={handleCreateTalep}
         onIssues={setValidationIssues}
+        defaultTalepKaynagi="Yıllık Talep"
       />
       <Modal
         open={Boolean(validationIssues.length)}

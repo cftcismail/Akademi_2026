@@ -2,6 +2,22 @@ import { format, parseISO } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import { AYLAR, BADGE_VARIANTS, VARSAYILAN_KURLAR } from '../data/constants'
 
+function buildTrainingKey(item) {
+  return `${normalizeSignatureText(item?.egitimKodu)}::${normalizeSignatureText(item?.egitimAdi)}`
+}
+
+function createCoverageRow(item, availablePlanCount) {
+  const matchedPlanCount = Math.min(item.talep, availablePlanCount)
+
+  return {
+    ...item,
+    plan: matchedPlanCount,
+    toplamPlan: availablePlanCount,
+    acik: Math.max(item.talep - matchedPlanCount, 0),
+    coverageRate: item.talep ? (matchedPlanCount / item.talep) * 100 : 0,
+  }
+}
+
 export function formatDate(value) {
   if (!value) {
     return '-'
@@ -123,6 +139,7 @@ export function formatEgitimLabel(egitim) {
 export function buildTalepDuplicateKey(payload) {
   return [
     payload.talepYili,
+    payload.talepKaynagi || 'Yıllık Talep',
     payload.yoneticiAdi,
     payload.yoneticiEmail,
     payload.gmy,
@@ -134,6 +151,100 @@ export function buildTalepDuplicateKey(payload) {
   ]
     .map((value) => normalizeSignatureText(value))
     .join('||')
+}
+
+export function getTalepKaynagiLabel(talep) {
+  return `${talep?.talepKaynagi || 'Yıllık Talep'}`.trim() || 'Yıllık Talep'
+}
+
+export function summarizeDemandCoverage(talepler = [], planlar = []) {
+  const normalizedTalepler = talepler.map((talep) => ({
+    ...talep,
+    talepKaynagi: getTalepKaynagiLabel(talep),
+  }))
+
+  const annualRequestRows = Object.values(
+    normalizedTalepler
+      .filter((talep) => talep.talepKaynagi === 'Yıllık Talep')
+      .flatMap((talep) => talep.egitimler || [])
+      .reduce((accumulator, egitim) => {
+        const trainingKey = buildTrainingKey(egitim)
+
+        if (!accumulator[trainingKey]) {
+          accumulator[trainingKey] = {
+            key: trainingKey,
+            egitimKodu: egitim.egitimKodu || '',
+            egitimAdi: egitim.egitimAdi || '',
+            kategori: egitim.kategori || 'Teknik',
+            talep: 0,
+          }
+        }
+
+        accumulator[trainingKey].talep += 1
+        return accumulator
+      }, {}),
+  )
+
+  const planRowsByTraining = Object.values(
+    planlar.reduce((accumulator, plan) => {
+      const trainingKey = buildTrainingKey(plan)
+
+      if (!accumulator[trainingKey]) {
+        accumulator[trainingKey] = {
+          key: trainingKey,
+          egitimKodu: plan.egitimKodu || '',
+          egitimAdi: plan.egitimAdi || '',
+          kategori: plan.kategori || 'Teknik',
+          plan: 0,
+        }
+      }
+
+      accumulator[trainingKey].plan += 1
+      return accumulator
+    }, {}),
+  )
+
+  const planCountByTraining = planRowsByTraining.reduce((accumulator, item) => {
+    accumulator.set(item.key, item.plan)
+    return accumulator
+  }, new Map())
+
+  const annualCoverageRows = annualRequestRows
+    .map((item) => createCoverageRow(item, planCountByTraining.get(item.key) || 0))
+    .sort((left, right) => right.acik - left.acik || right.talep - left.talep)
+
+  const annualRequestKeys = new Set(annualRequestRows.map((item) => item.key))
+  const externalPlanRows = planRowsByTraining
+    .filter((item) => !annualRequestKeys.has(item.key))
+    .sort((left, right) => right.plan - left.plan || left.egitimAdi.localeCompare(right.egitimAdi, 'tr'))
+
+  const annualDemandCount = annualCoverageRows.reduce((total, item) => total + item.talep, 0)
+  const annualCoveredDemandCount = annualCoverageRows.reduce((total, item) => total + item.plan, 0)
+  const annualCoverageRate = annualDemandCount ? (annualCoveredDemandCount / annualDemandCount) * 100 : 0
+  const annualCoveredTitleCount = annualCoverageRows.filter((item) => item.plan > 0).length
+  const individualRequestCount = normalizedTalepler.filter((talep) => talep.talepKaynagi === 'Bireysel Talep').length
+  const individualDemandCount = normalizedTalepler
+    .filter((talep) => talep.talepKaynagi === 'Bireysel Talep')
+    .reduce((total, talep) => total + (talep.egitimler?.length || 0), 0)
+  const individualPlannedCount = planlar.filter((plan) => {
+    const sourceRequest = normalizedTalepler.find((talep) => talep.id === plan.talepId)
+    return sourceRequest?.talepKaynagi === 'Bireysel Talep'
+  }).length
+
+  return {
+    annualCoverageRows,
+    externalPlanRows,
+    annualRequestTitleCount: annualCoverageRows.length,
+    annualCoveredTitleCount,
+    annualDemandCount,
+    annualCoveredDemandCount,
+    annualCoverageRate,
+    externalPlannedCount: externalPlanRows.reduce((total, item) => total + item.plan, 0),
+    externalPlannedTitleCount: externalPlanRows.length,
+    individualRequestCount,
+    individualDemandCount,
+    individualPlannedCount,
+  }
 }
 
 export function includesText(source, query) {

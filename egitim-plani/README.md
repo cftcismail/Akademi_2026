@@ -1,6 +1,6 @@
 # Eğitim Planı Yönetim Sistemi
 
-Şirket içi eğitim biriminin talepleri toplamasını, eğitim planına dönüştürmesini ve üst yönetime raporlamasını sağlayan React tabanlı tek sayfa uygulaması.
+Şirket içi eğitim biriminin talepleri toplamasını, eğitim planına dönüştürmesini ve üst yönetime raporlamasını sağlayan React tabanlı tek sayfa uygulaması. Bu sürümde sistem merkezî Node API ve PostgreSQL ile ortak veri modeli üzerinden çalışır.
 
 ## Özellikler
 
@@ -14,8 +14,9 @@
 - Çalışan detay görünümü
 - Yönetim raporları, CSV dışa aktarma ve PDF alma
 - `/adminakademi` adresinde şifre korumalı admin ekranı
-- localStorage tabanlı kalıcı tarayıcı verisi
-- Docker ile üretim yayını
+- Node API + PostgreSQL ile ortak veri katmanı
+- Docker Compose ile tam production stack yayını
+- API erişilemediğinde localStorage fallback davranışı
 
 ## Yerel Kurulum
 
@@ -26,6 +27,18 @@ npm run dev
 
 Uygulama varsayılan olarak http://localhost:5173 adresinde açılır.
 
+Merkezî API ile yerelde çalışmak için ayrı terminalde:
+
+```bash
+npm run dev:server
+```
+
+API varsayılan olarak http://localhost:3001 adresinde açılır. Frontend geliştirme ortamında API kullanmak için `.env` içinde şu değeri tanımlayabilirsiniz:
+
+```bash
+VITE_API_BASE_URL=http://localhost:3001/api
+```
+
 ## Docker ile Kurulum
 
 ```bash
@@ -33,6 +46,12 @@ docker compose up --build
 ```
 
 Uygulama http://localhost:8080 adresinde yayınlanır.
+
+Docker Compose aşağıdaki servisleri ayağa kaldırır:
+
+- `egitim-plani`: Nginx üzerinden servis edilen React frontend
+- `api`: Express tabanlı Node API
+- `postgres`: PostgreSQL veri tabanı
 
 Admin ekranı: `http://localhost:8080/adminakademi`
 
@@ -62,6 +81,8 @@ docker compose down
 
 - React 19
 - Vite
+- Express 5
+- PostgreSQL 16
 - React Router DOM
 - Recharts
 - Tailwind CSS v4
@@ -72,7 +93,7 @@ docker compose down
 
 ## Veri Yapısı
 
-Veriler tarayıcı localStorage üzerinde aşağıdaki anahtarlarla saklanır:
+Veriler PostgreSQL içinde ilişkisel tablolar üzerinde merkezî olarak saklanır. Kullanılan ana tablolar: `catalog`, `exchange_rates`, `gmy_list`, `institutions`, `plans`, `request_trainings`, `requests`, `trainers`, `training_categories`. Frontend çevrimdışı/fallback amaçlı aynı verileri tarayıcıda da aşağıdaki anahtarlarla önbelleğe alır:
 
 - `egitim-plani:katalog`
 - `egitim-plani:talepler`
@@ -104,7 +125,8 @@ Talepler ekranındaki yükleme alanı `.xlsx`, `.xls` ve `.csv` dosyalarını ka
 ## Notlar
 
 - İlk açılışta örnek kayıt yüklenmez; ekranlar boş başlar.
-- Tarayıcı verisi temizlenirse kayıtlar silinir.
+- PostgreSQL çalışan sürece veriler tarayıcıdan bağımsız olarak tüm kullanıcılara ortak görünür.
+- API geçici olarak erişilemezse uygulama tarayıcıdaki son yerel kopya ile çalışmaya devam eder.
 - Aynı çalışan ve aynı içerik tekrar eklenirse kayıt atlanır ve uyarı listesinde gösterilir.
 - Admin ekranından GMY listesi eklenebilir, güncellenebilir ve kullanılmayan kayıtlar kaldırılabilir.
-- Çok kullanıcılı kullanım için ileride Supabase entegrasyonu eklenebilir.
+- Gelişmiş kimlik doğrulama, kullanıcı yetkileri ve denetim izi için bir sonraki adım API tarafında rol bazlı auth eklemektir.
