@@ -17,6 +17,7 @@ import {
   formatDate,
   formatEgitimLabel,
   getPlanCostInTry,
+  getPlanProviderLabel,
   getUniqueYears,
 } from '../../utils/helpers'
 import { downloadElementAsPdf } from '../../utils/pdfExport'
@@ -32,35 +33,29 @@ function formatPercent(value) {
 }
 
 export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilgileri }) {
-  const years = getUniqueYears(planlar)
-  const [selectedYear, setSelectedYear] = useState(years[0])
+  const years = getUniqueYears(planlar, talepler)
+  const [selectedYear, setSelectedYear] = useState(years[0] || new Date().getFullYear())
   const [selectedGmy, setSelectedGmy] = useState('Tümü')
   const dashboardRef = useRef(null)
+  const activeYear = years.includes(selectedYear) ? selectedYear : years[0] || new Date().getFullYear()
   const activeGmy = selectedGmy === 'Tümü' || gmyList.includes(selectedGmy) ? selectedGmy : 'Tümü'
   const today = new Date()
   const nextThirtyDays = addDays(today, 30)
 
   const filteredPlans = planlar.filter(
-    (plan) => plan.egitimYili === Number(selectedYear) && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
+    (plan) => plan.egitimYili === Number(activeYear) && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
   )
 
-  const filteredTalepler = talepler.filter(
-    (talep) => activeGmy === 'Tümü' || talep.gmy === activeGmy,
-  )
-  const previousYearPlans = planlar.filter(
-    (plan) => plan.egitimYili === Number(selectedYear) - 1 && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
-  )
-  const currentYearRequests = filteredTalepler.filter((talep) => Number(talep.talepYili) === Number(selectedYear))
-  const previousYearRequests = talepler.filter(
+  const currentYearRequests = talepler.filter(
     (talep) =>
-      Number(talep.talepYili) === Number(selectedYear) - 1 && (activeGmy === 'Tümü' || talep.gmy === activeGmy),
+      Number(talep.talepYili) === Number(activeYear) && (activeGmy === 'Tümü' || talep.gmy === activeGmy),
   )
 
   const filteredCatalogCount =
     activeGmy === 'Tümü'
       ? katalog.length
       : katalog.filter((item) =>
-          filteredTalepler.some((talep) => talep.egitimler.some((egitim) => egitim.egitimAdi === item.ad)),
+          currentYearRequests.some((talep) => talep.egitimler.some((egitim) => egitim.egitimAdi === item.ad)),
         ).length
 
   const stats = {
@@ -70,14 +65,13 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
     calisan: new Set(filteredPlans.map((plan) => plan.calisanSicil)).size,
   }
 
-  const pendingRequestCount = filteredTalepler.filter((talep) => talep.durum === 'beklemede').length
-  const plannedRequestCount = filteredTalepler.filter((talep) => talep.durum === 'plana_eklendi').length
-  const conversionRate = filteredTalepler.length ? (plannedRequestCount / filteredTalepler.length) * 100 : 0
+  const pendingRequestCount = currentYearRequests.filter((talep) => talep.durum === 'beklemede').length
+  const plannedRequestCount = currentYearRequests.filter((talep) => talep.durum === 'plana_eklendi').length
+  const conversionRate = currentYearRequests.length ? (plannedRequestCount / currentYearRequests.length) * 100 : 0
   const completionCount = filteredPlans.filter((plan) => plan.durum === 'tamamlandı').length
   const completionRate = filteredPlans.length ? (completionCount / filteredPlans.length) * 100 : 0
   const totalBudget = filteredPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)
   const averageBudget = filteredPlans.length ? totalBudget / filteredPlans.length : 0
-  const previousBudget = previousYearPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)
   const averageLeadTime = filteredPlans.length
     ? filteredPlans.reduce((total, plan) => {
         if (!plan.planlanmaTarihi || !plan.egitimTarihi) {
@@ -93,7 +87,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
     {
       label: 'Bekleyen Talep',
       value: pendingRequestCount,
-      meta: `${filteredTalepler.length} toplam talep içinde`,
+      meta: `${currentYearRequests.length} toplam talep içinde`,
     },
     {
       label: 'Dönüşüm Oranı',
@@ -141,19 +135,19 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
 
   const comparisonCards = [
     {
-      label: `${selectedYear} Talep`,
+      label: `${activeYear} Talep`,
       current: currentYearRequests.length,
-      previous: previousYearRequests.length,
+      meta: `${plannedRequestCount} talep planlandı`,
     },
     {
-      label: `${selectedYear} Plan`,
+      label: `${activeYear} Plan`,
       current: filteredPlans.length,
-      previous: previousYearPlans.length,
+      meta: `${completionCount} plan tamamlandı`,
     },
     {
       label: 'Toplam Bütçe',
       current: formatCurrency(totalBudget),
-      previous: formatCurrency(previousBudget),
+      meta: `${formatCurrency(averageBudget)} ortalama bütçe`,
     },
   ]
 
@@ -175,7 +169,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
   const gmyData = gmyList
     .map((gmy) => {
       const plansByGmy = filteredPlans.filter((plan) => plan.gmy === gmy)
-      const requestsByGmy = filteredTalepler.filter((talep) => talep.gmy === gmy)
+      const requestsByGmy = currentYearRequests.filter((talep) => talep.gmy === gmy)
 
       return {
         gmy,
@@ -184,13 +178,13 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
         egitimCesidi: new Set(plansByGmy.map((plan) => plan.egitimAdi)).size,
         talep: requestsByGmy.length,
         bekleyen: requestsByGmy.filter((talep) => talep.durum === 'beklemede').length,
-        maliyet: plansByGmy.reduce((total, plan) => total + Number(plan.maliyet || 0), 0),
+        maliyet: plansByGmy.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0),
       }
     })
     .filter((item) => item.count > 0)
 
   const topEgitimler = Object.values(
-    filteredTalepler
+    currentYearRequests
       .flatMap((talep) => talep.egitimler)
       .reduce((accumulator, egitim) => {
         const trainingKey = `${egitim.egitimKodu || ''}::${egitim.egitimAdi}`
@@ -214,7 +208,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
   const demandByCategory = useMemo(
     () =>
       Object.values(
-        filteredTalepler.flatMap((talep) => talep.egitimler).reduce((accumulator, egitim) => {
+        currentYearRequests.flatMap((talep) => talep.egitimler).reduce((accumulator, egitim) => {
           if (!accumulator[egitim.kategori]) {
             accumulator[egitim.kategori] = {
               kategori: egitim.kategori,
@@ -232,11 +226,11 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
           plan: filteredPlans.filter((plan) => plan.kategori === item.kategori).length,
         }))
         .sort((left, right) => right.talep - left.talep),
-    [filteredPlans, filteredTalepler],
+    [currentYearRequests, filteredPlans],
   )
 
   const demandCoverage = Object.values(
-    filteredTalepler.flatMap((talep) => talep.egitimler).reduce((accumulator, egitim) => {
+    currentYearRequests.flatMap((talep) => talep.egitimler).reduce((accumulator, egitim) => {
       const trainingKey = `${egitim.egitimKodu || ''}::${egitim.egitimAdi}`
 
       if (!accumulator[trainingKey]) {
@@ -282,11 +276,11 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
 
   const trainerLoad = Object.values(
     filteredPlans.reduce((accumulator, plan) => {
-      const key = `${plan.egitimci || 'Tanımsız'}`.trim() || 'Tanımsız'
+      const key = getPlanProviderLabel(plan)
 
       if (!accumulator[key]) {
         accumulator[key] = {
-          egitimci: key,
+          saglayici: key,
           plan: 0,
           calisan: new Set(),
           butce: 0,
@@ -328,7 +322,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
 
   async function handleDownloadPdf() {
     try {
-      await downloadElementAsPdf(dashboardRef.current, `dashboard-${selectedYear}.pdf`)
+      await downloadElementAsPdf(dashboardRef.current, `dashboard-${activeYear}.pdf`)
       toast.success('Dashboard PDF olarak indirildi.')
     } catch (error) {
       toast.error(error.message || 'Dashboard PDF olarak indirilemedi.')
@@ -357,13 +351,13 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
           <h2>Kurumsal eğitim planının operasyonel ve stratejik görünümü</h2>
           <p>
             Talep yükünü, plan dönüşümünü, yaklaşan eğitimleri ve bütçe baskısını aynı ekranda
-            görün. Dashboard artık yalnızca planı değil, tüm eğitim hattını birlikte okur.
+            görün. Bu dashboard yalnızca seçtiğiniz yılın verileriyle hesaplanır; diğer yıllar karışmaz.
           </p>
         </div>
         <div className="filter-row filter-row--hero">
           <label>
             <span>Yıl</span>
-            <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
+            <select value={activeYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
               {years.map((year) => (
                 <option key={year} value={year}>
                   {year}
@@ -416,7 +410,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
           <Card key={item.label} className="comparison-card">
             <span>{item.label}</span>
             <strong>{item.current}</strong>
-            <small>{`${selectedYear - 1}: ${item.previous}`}</small>
+            <small>{item.meta}</small>
           </Card>
         ))}
       </section>
@@ -435,15 +429,15 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
         <Card className="chart-card">
           <div className="section-heading">
             <div>
-              <h3>Eğitmen Yük Dağılımı</h3>
-              <p>En çok plan yöneten eğitmenleri ve TL bütçe yüklerini görün</p>
+              <h3>Sağlayıcı Yük Dağılımı</h3>
+              <p>İç eğitmen ve dış kurumların plan ve TL bütçe yükünü görün</p>
             </div>
           </div>
           <div className="table-wrapper">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Eğitmen</th>
+                  <th>Sağlayıcı</th>
                   <th>Plan</th>
                   <th>Çalışan</th>
                   <th>TL Bütçe</th>
@@ -451,8 +445,8 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
               </thead>
               <tbody>
                 {trainerLoad.map((item) => (
-                  <tr key={item.egitimci}>
-                    <td>{item.egitimci}</td>
+                  <tr key={item.saglayici}>
+                    <td>{item.saglayici}</td>
                     <td>{item.plan}</td>
                     <td>{item.calisan}</td>
                     <td>{formatCurrency(item.butce)}</td>

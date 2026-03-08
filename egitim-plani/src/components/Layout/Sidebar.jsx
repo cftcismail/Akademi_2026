@@ -4,15 +4,17 @@ import {
   CalendarRange,
   ClipboardList,
   GraduationCap,
+  Trophy,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
-import { ADMIN_ROUTE } from '../../data/constants'
+import { ADMIN_ROUTE, IC_EGITMEN_DASHBOARD_ROUTE } from '../../data/constants'
 
 const navigationItems = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
   { to: '/talepler', label: 'Talepler', icon: ClipboardList },
   { to: '/plan', label: 'Eğitim Planı', icon: CalendarRange },
   { to: '/raporlar', label: 'Raporlar', icon: GraduationCap },
+  { to: IC_EGITMEN_DASHBOARD_ROUTE, label: 'İç Eğitmen', icon: Trophy },
 ]
 
 export default function Sidebar({ isAdminAuthenticated }) {

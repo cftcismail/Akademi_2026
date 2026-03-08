@@ -50,12 +50,31 @@ export function formatPlanOriginalCost(plan) {
   return formatCurrency(originalCost, currency)
 }
 
+export function getPlanProviderLabel(plan) {
+  if (!plan) {
+    return '-'
+  }
+
+  if (plan.icEgitim) {
+    return `${plan.egitimci || 'İç Eğitmen'}`.trim() || 'İç Eğitmen'
+  }
+
+  return `${plan.kurum || plan.egitimci || 'Kurum atanmadı'}`.trim() || 'Kurum atanmadı'
+}
+
+export function getPlanProviderTypeLabel(plan) {
+  return plan?.icEgitim ? 'İç Eğitim' : 'Dış Kurum'
+}
+
 export function getMonthLabel(monthNumber) {
   return AYLAR[(monthNumber || 1) - 1]
 }
 
-export function getUniqueYears(planlar) {
-  const years = new Set(planlar.map((plan) => plan.egitimYili))
+export function getUniqueYears(planlar = [], talepler = []) {
+  const years = new Set([
+    ...planlar.map((plan) => Number(plan.egitimYili)).filter(Number.isFinite),
+    ...talepler.map((talep) => Number(talep.talepYili)).filter(Number.isFinite),
+  ])
   years.add(new Date().getFullYear())
   return [...years].sort((left, right) => right - left)
 }

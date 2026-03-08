@@ -16,13 +16,23 @@ function createPlanningDraft() {
     egitimTuru: EGITIM_TURLERI[0],
     egitimTarihi: new Date().toISOString().slice(0, 10),
     sure: '1 gün',
+    icEgitim: true,
     egitimci: 'İç Eğitim',
+    kurum: '',
     maliyet: 0,
     maliyetParaBirimi: 'TRY',
     dovizKuru: 1,
     durum: DURUM_LISTESI[0],
     notlar: '',
   }
+}
+
+function getDefaultInternalTrainerName(egitmenListesi = []) {
+  return egitmenListesi[0]?.ad || ''
+}
+
+function getDefaultInstitutionName(kurumListesi = []) {
+  return kurumListesi[0]?.ad || ''
 }
 
 function getSelectionKey(row) {
@@ -99,7 +109,16 @@ function paginate(items, page, pageSize) {
   return items.slice(startIndex, startIndex + pageSize)
 }
 
-function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, onSaveBatch, egitmenListesi, kurBilgileri }) {
+function TrainingPlanningModal({
+  requestRows,
+  open,
+  onOpenChange,
+  onSaveSingle,
+  onSaveBatch,
+  egitmenListesi,
+  kurumListesi,
+  kurBilgileri,
+}) {
   const [draft, setDraft] = useState(createPlanningDraft())
 
   useEffect(() => {
@@ -109,9 +128,15 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
 
     setDraft((current) => ({
       ...current,
+      egitimci: current.icEgitim
+        ? current.egitimci || getDefaultInternalTrainerName(egitmenListesi)
+        : '',
+      kurum: current.icEgitim
+        ? ''
+        : current.kurum || getDefaultInstitutionName(kurumListesi),
       dovizKuru: current.maliyetParaBirimi === 'TRY' ? 1 : Number(kurBilgileri?.[current.maliyetParaBirimi] || current.dovizKuru || 1),
     }))
-  }, [kurBilgileri, open])
+  }, [egitmenListesi, kurumListesi, kurBilgileri, open])
 
   if (!requestRows.length) {
     return null
@@ -126,7 +151,9 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
       egitimTarihi: draft.egitimTarihi,
       egitimTuru: draft.egitimTuru,
       sure: draft.sure,
-      egitimci: draft.egitimci,
+      icEgitim: draft.icEgitim,
+      egitimci: draft.icEgitim ? draft.egitimci : '',
+      kurum: draft.icEgitim ? '' : draft.kurum,
       maliyet: draft.maliyet,
       maliyetParaBirimi: draft.maliyetParaBirimi,
       dovizKuru: draft.maliyetParaBirimi === 'TRY' ? 1 : Number(draft.dovizKuru || 1),
@@ -231,22 +258,51 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
           <input value={draft.sure} onChange={(event) => setDraft({ ...draft, sure: event.target.value })} />
         </label>
         <label>
-          <span>Eğitimci</span>
-          <>
+          <span>İç Eğitim</span>
+          <div className="checkbox-card checkbox-card--inline">
             <input
-              list="egitmen-listesi"
-              value={draft.egitimci}
-              onChange={(event) => setDraft({ ...draft, egitimci: event.target.value })}
-              placeholder="Eğitmen seçin veya yazın"
+              type="checkbox"
+              checked={draft.icEgitim}
+              onChange={(event) =>
+                setDraft((current) => ({
+                  ...current,
+                  icEgitim: event.target.checked,
+                  egitimci: event.target.checked ? current.egitimci || getDefaultInternalTrainerName(egitmenListesi) : '',
+                  kurum: event.target.checked ? '' : current.kurum || getDefaultInstitutionName(kurumListesi),
+                }))
+              }
             />
-            <datalist id="egitmen-listesi">
+            <div>
+              <strong>{draft.icEgitim ? 'İç eğitmen seçilecek' : 'Dış kurum seçilecek'}</strong>
+              <span>{draft.icEgitim ? 'Kurum alanı pasif, iç eğitmen listesi aktif.' : 'İç eğitmen alanı pasif, kurum listesi aktif.'}</span>
+            </div>
+          </div>
+        </label>
+        <label>
+          <span>İç Eğitmen</span>
+          <select
+              value={draft.egitimci}
+              disabled={!draft.icEgitim}
+              onChange={(event) => setDraft({ ...draft, egitimci: event.target.value })}
+            >
+              <option value="">İç eğitmen seçin</option>
               {egitmenListesi.map((trainer) => (
-                <option key={trainer.id} value={trainer.ad}>
-                  {trainer.kurum || trainer.uzmanlik || trainer.email}
-                </option>
+                <option key={trainer.id} value={trainer.ad}>{`${trainer.ad}${trainer.birim ? ` • ${trainer.birim}` : ''}`}</option>
               ))}
-            </datalist>
-          </>
+          </select>
+        </label>
+        <label>
+          <span>Kurum</span>
+          <select
+              value={draft.kurum}
+              disabled={draft.icEgitim}
+              onChange={(event) => setDraft({ ...draft, kurum: event.target.value })}
+            >
+              <option value="">Kurum seçin</option>
+              {kurumListesi.map((institution) => (
+                <option key={institution.id} value={institution.ad}>{institution.ad}</option>
+              ))}
+          </select>
         </label>
         <label>
           <span>Durum</span>
@@ -301,7 +357,15 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
   )
 }
 
-export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTalepler, egitmenListesi, kurBilgileri }) {
+export default function EgitimPlaniPage({
+  talepler,
+  planlar,
+  planTalep,
+  planTalepler,
+  egitmenListesi,
+  kurumListesi,
+  kurBilgileri,
+}) {
   const activeTalepYili = Math.max(...talepler.map((talep) => Number(talep.talepYili || new Date().getFullYear())), new Date().getFullYear())
   const activeTalepler = talepler.filter((talep) => Number(talep.talepYili || new Date().getFullYear()) === activeTalepYili)
 
@@ -873,6 +937,7 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
             onSaveSingle={planTalep}
             onSaveBatch={planTalepler}
             egitmenListesi={egitmenListesi}
+            kurumListesi={kurumListesi}
             kurBilgileri={kurBilgileri}
           />
         </>

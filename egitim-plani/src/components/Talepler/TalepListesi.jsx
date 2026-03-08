@@ -6,7 +6,7 @@ import EmptyState from '../ui/EmptyState'
 import PlanEkleModal from '../EgitimPlani/PlanEkleModal'
 import { formatEgitimLabel, getEmployeeRoute } from '../../utils/helpers'
 import TalepDetay from './TalepDetay'
-export default function TaleplerPage({ talepler, planlar, planTalep }) {
+export default function TaleplerPage({ talepler, planlar, planTalep, egitmenListesi, kurumListesi, kurBilgileri }) {
   const [selectedTalep, setSelectedTalep] = useState(null)
   const [planningTalep, setPlanningTalep] = useState(null)
   const talepYillari = useMemo(
@@ -129,6 +129,9 @@ export default function TaleplerPage({ talepler, planlar, planTalep }) {
         onOpenChange={() => setPlanningTalep(null)}
         talep={planningTalep}
         onSubmit={planTalep}
+        egitmenListesi={egitmenListesi}
+        kurumListesi={kurumListesi}
+        kurBilgileri={kurBilgileri}
       />
     </div>
   )

@@ -932,6 +932,27 @@ textarea {
   border-radius: 18px;
 }
 
+.checkbox-card--inline {
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  background: rgba(248, 250, 252, 0.88);
+}
+
+.checkbox-card--inline strong,
+.award-card h3 {
+  margin: 0;
+}
+
+.award-card {
+  display: grid;
+  gap: 10px;
+}
+
+.award-card strong {
+  font-size: 1.5rem;
+  color: var(--text-primary);
+}
+
 .checkbox-card input {
   width: auto;
 }

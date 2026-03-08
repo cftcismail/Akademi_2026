@@ -1,5 +1,17 @@
 import { useEffect, useState } from 'react'
 
+function isSameShape(value, initialValue) {
+  if (Array.isArray(initialValue)) {
+    return Array.isArray(value)
+  }
+
+  if (initialValue && typeof initialValue === 'object') {
+    return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+  }
+
+  return typeof value === typeof initialValue
+}
+
 function readInitialValue(key, initialValue) {
   const storedValue = window.localStorage.getItem(key)
 
@@ -8,7 +20,8 @@ function readInitialValue(key, initialValue) {
   }
 
   try {
-    return JSON.parse(storedValue)
+    const parsedValue = JSON.parse(storedValue)
+    return isSameShape(parsedValue, initialValue) ? parsedValue : initialValue
   } catch {
     return initialValue
   }

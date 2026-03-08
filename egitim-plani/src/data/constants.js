@@ -28,11 +28,20 @@ export const VARSAYILAN_KURLAR = {
   GBP: 48,
 }
 
+export const VARSAYILAN_KURUMLAR = [
+  {
+    id: 'institution-academy-plus',
+    ad: 'Akademi Plus',
+    email: 'iletisim@akademiplus.com',
+    uzmanlik: 'Liderlik ve yönetsel gelişim',
+  },
+]
+
 export const VARSAYILAN_EGITMENLER = [
   {
     id: 'trainer-ic-egitim',
     ad: 'İç Eğitim',
-    kurum: 'Şirket İçi',
+    birim: 'Şirket İçi',
     email: '',
     uzmanlik: 'Genel Eğitim',
   },
@@ -84,6 +93,10 @@ export const ROUTE_BASLIKLARI = {
     title: 'Raporlar',
     description: 'Yönetim sunumuna uygun özet veriler ve ihracat araçları.',
   },
+  '/ic-egitmen-dashboard': {
+    title: 'İç Eğitmen Dashboard',
+    description: 'İç eğitim performansı, ödül adayları ve eğitmen etkisi görünümü.',
+  },
 }
 
 export const LOCAL_STORAGE_KEYS = {
@@ -92,8 +105,11 @@ export const LOCAL_STORAGE_KEYS = {
   planlar: 'egitim-plani:planlar',
   gmyList: 'egitim-plani:gmy-list',
   egitimKategorileri: 'egitim-plani:egitim-kategorileri',
+  kurumListesi: 'egitim-plani:kurum-listesi',
   egitmenListesi: 'egitim-plani:egitmen-listesi',
   kurBilgileri: 'egitim-plani:kur-bilgileri',
 }
+
+export const IC_EGITMEN_DASHBOARD_ROUTE = '/ic-egitmen-dashboard'
 
 export const ADMIN_ROUTE = '/adminakademi'

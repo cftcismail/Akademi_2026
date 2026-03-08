@@ -21,6 +21,8 @@ import {
   formatDate,
   formatEgitimLabel,
   getPlanCostInTry,
+  getPlanProviderLabel,
+  getPlanProviderTypeLabel,
   getUniqueYears,
 } from '../../utils/helpers'
 import Card from '../ui/Card'
@@ -31,21 +33,19 @@ function formatPercent(value) {
 }
 
 export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
-  const years = getUniqueYears(planlar)
-  const [selectedYear, setSelectedYear] = useState(years[0])
+  const years = getUniqueYears(planlar, talepler)
+  const [selectedYear, setSelectedYear] = useState(years[0] || new Date().getFullYear())
   const [selectedGmy, setSelectedGmy] = useState('Tümü')
   const reportRef = useRef(null)
+  const activeYear = years.includes(selectedYear) ? selectedYear : years[0] || new Date().getFullYear()
   const activeGmy = selectedGmy === 'Tümü' || gmyList.includes(selectedGmy) ? selectedGmy : 'Tümü'
   const futureThreshold = addDays(new Date(), 60)
 
   const currentYearPlans = planlar.filter(
-    (plan) => plan.egitimYili === Number(selectedYear) && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
-  )
-  const previousYearPlans = planlar.filter(
-    (plan) => plan.egitimYili === Number(selectedYear) - 1 && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
+    (plan) => plan.egitimYili === Number(activeYear) && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
   )
   const currentYearRequests = talepler.filter(
-    (talep) => Number(talep.talepYili) === Number(selectedYear) && (activeGmy === 'Tümü' || talep.gmy === activeGmy),
+    (talep) => Number(talep.talepYili) === Number(activeYear) && (activeGmy === 'Tümü' || talep.gmy === activeGmy),
   )
 
   const totalPlan = currentYearPlans.length
@@ -60,26 +60,22 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
     {
       label: 'Talep',
       current: currentYearRequests.length,
-      previous: previousYearPlans.length,
+      meta: `${currentYearRequests.filter((talep) => talep.durum === 'plana_eklendi').length} talep planlandı`,
     },
     {
       label: 'Plan',
       current: totalPlan,
-      previous: previousYearPlans.length,
+      meta: `${completedCount} plan tamamlandı`,
     },
     {
       label: 'Dönüşüm',
       current: formatPercent(conversionRate),
-      previous: formatPercent(
-        previousYearPlans.length
-          ? (previousYearPlans.length / Math.max(previousYearPlans.length, 1)) * 100
-          : 0,
-      ),
+      meta: `${currentYearRequests.length - currentYearRequests.filter((talep) => talep.durum === 'plana_eklendi').length} talep beklemede`,
     },
     {
       label: 'Bütçe',
       current: formatCurrency(totalBudget),
-      previous: formatCurrency(previousYearPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)),
+      meta: `${totalPlan ? formatCurrency(totalBudget / totalPlan) : formatCurrency(0)} ortalama plan bütçesi`,
     },
   ]
 
@@ -146,11 +142,11 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
 
   const trainerScorecard = Object.values(
     currentYearPlans.reduce((accumulator, plan) => {
-      const key = `${plan.egitimci || 'Tanımsız'}`.trim() || 'Tanımsız'
+      const key = getPlanProviderLabel(plan)
 
       if (!accumulator[key]) {
         accumulator[key] = {
-          egitimci: key,
+          saglayici: key,
           plan: 0,
           calisan: new Set(),
           butce: 0,
@@ -205,7 +201,7 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
 
   function handleExport() {
     downloadCsv(
-      `egitim-plani-${selectedYear}.csv`,
+      `egitim-plani-${activeYear}.csv`,
       currentYearPlans.map((plan) => ({
         'Talep Yılı': plan.egitimYili,
         'Çalışan Adı': plan.calisanAdi,
@@ -216,10 +212,13 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
         Eğitim: plan.egitimAdi,
         Kategori: plan.kategori,
         'Eğitim Türü': plan.egitimTuru,
+        'Sağlayıcı Türü': getPlanProviderTypeLabel(plan),
+        Kurum: plan.kurum,
+        'İç Eğitmen': plan.egitimci,
         'Planlanma Tarihi': plan.planlanmaTarihi,
         'Eğitim Tarihi': plan.egitimTarihi,
         Süre: plan.sure,
-        Eğitimci: plan.egitimci,
+        Sağlayıcı: getPlanProviderLabel(plan),
         Durum: plan.durum,
         'Para Birimi': plan.maliyetParaBirimi || 'TRY',
         Kur: plan.dovizKuru || 1,
@@ -231,7 +230,7 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
 
   async function handleDownloadPdf() {
     try {
-      await downloadElementAsPdf(reportRef.current, `raporlar-${selectedYear}.pdf`)
+      await downloadElementAsPdf(reportRef.current, `raporlar-${activeYear}.pdf`)
       toast.success('Rapor ekranı PDF olarak indirildi.')
     } catch (error) {
       toast.error(error.message || 'Rapor PDF olarak indirilemedi.')
@@ -243,13 +242,13 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
       <section className="page-toolbar">
         <Card className="surface-card--accent">
           <span className="eyebrow">Yönetim Raporları</span>
-          <h2>Geçmiş yıl karşılaştırmalı eğitim raporları</h2>
-          <p>Talep, plan, bütçe ve GMY performansını aynı rapor setinde karşılaştırın.</p>
+          <h2>Seçili yılın eğitim raporları</h2>
+          <p>Talep, plan, bütçe ve GMY performansını seçtiğiniz yıl için izleyin. Başka yılların verisi bu rapora karışmaz.</p>
         </Card>
         <div className="toolbar-actions">
           <label>
             <span>Yıl</span>
-            <select value={selectedYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
+            <select value={activeYear} onChange={(event) => setSelectedYear(Number(event.target.value))}>
               {years.map((year) => (
                 <option key={year} value={year}>
                   {year}
@@ -283,7 +282,7 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
           <Card key={item.label} className="comparison-card">
             <span>{item.label}</span>
             <strong>{item.current}</strong>
-            <small>{`${selectedYear - 1}: ${item.previous}`}</small>
+            <small>{item.meta}</small>
           </Card>
         ))}
       </section>
@@ -305,15 +304,15 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
         <Card className="chart-card">
           <div className="section-heading">
             <div>
-              <h3>Eğitmen Skor Kartı</h3>
-              <p>Plan adedi, çalışan etkisi ve TL bütçe yükü</p>
+              <h3>Sağlayıcı Skor Kartı</h3>
+              <p>İç eğitmen ve dış kurum bazında plan adedi, çalışan etkisi ve TL bütçe yükü</p>
             </div>
           </div>
           <div className="table-wrapper">
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Eğitmen</th>
+                  <th>Sağlayıcı</th>
                   <th>Plan</th>
                   <th>Çalışan</th>
                   <th>TL Bütçe</th>
@@ -321,8 +320,8 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
               </thead>
               <tbody>
                 {trainerScorecard.map((item) => (
-                  <tr key={item.egitimci}>
-                    <td>{item.egitimci}</td>
+                  <tr key={item.saglayici}>
+                    <td>{item.saglayici}</td>
                     <td>{item.plan}</td>
                     <td>{item.calisan}</td>
                     <td>{formatCurrency(item.butce)}</td>
@@ -472,7 +471,7 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
                   </div>
                   <div className="insight-list-item__meta">
                     <strong>{formatDate(plan.egitimTarihi)}</strong>
-                    <small>{`${plan.egitimci} • ${formatCurrency(getPlanCostInTry(plan, kurBilgileri))}`}</small>
+                    <small>{`${getPlanProviderLabel(plan)} • ${formatCurrency(getPlanCostInTry(plan, kurBilgileri))}`}</small>
                   </div>
                 </div>
               ))

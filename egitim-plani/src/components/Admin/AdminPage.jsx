@@ -32,13 +32,26 @@ function buildCatalogDraftMap(katalog) {
   )
 }
 
-function buildTrainerDraftMap(egitmenListesi) {
+function buildInstitutionDraftMap(kurumListesi) {
+  return Object.fromEntries(
+    kurumListesi.map((item) => [
+      item.id,
+      {
+        ad: item.ad || '',
+        email: item.email || '',
+        uzmanlik: item.uzmanlik || '',
+      },
+    ]),
+  )
+}
+
+function buildInternalTrainerDraftMap(egitmenListesi) {
   return Object.fromEntries(
     egitmenListesi.map((item) => [
       item.id,
       {
         ad: item.ad || '',
-        kurum: item.kurum || '',
+        birim: item.birim || '',
         email: item.email || '',
         uzmanlik: item.uzmanlik || '',
       },
@@ -55,10 +68,18 @@ function paginate(items, page, pageSize) {
   return items.slice(startIndex, startIndex + pageSize)
 }
 
+function mapExcelRowsToKurumlar(rows) {
+  return rows.map((row) => ({
+    ad: `${row.Kurum || row.KurumAdi || row['Kurum Adı'] || row.Firma || row.Sirket || row.Şirket || ''}`.trim(),
+    email: `${row.Email || row.Eposta || row['E-Posta'] || ''}`.trim(),
+    uzmanlik: `${row.Uzmanlik || row.Uzmanlık || row.HizmetAlani || row['Hizmet Alanı'] || ''}`.trim(),
+  }))
+}
+
 function mapExcelRowsToEgitmenler(rows) {
   return rows.map((row) => ({
     ad: `${row.Egitimci || row.Eğitimci || row.Ad || row.Adi || row.AdSoyad || row['Ad Soyad'] || ''}`.trim(),
-    kurum: `${row.Kurum || row.Sirket || row.Şirket || ''}`.trim(),
+    birim: `${row.Birim || row.Departman || row.Kurum || row.Sirket || row.Şirket || ''}`.trim(),
     email: `${row.Email || row.Eposta || row['E-Posta'] || ''}`.trim(),
     uzmanlik: `${row.Uzmanlik || row.Uzmanlık || row.Brans || row.Brans || ''}`.trim(),
   }))
@@ -70,6 +91,7 @@ export default function AdminPage({
   gmyList,
   egitimKategorileri,
   katalog,
+  kurumListesi,
   egitmenListesi,
   kurBilgileri,
   addTalep,
@@ -83,6 +105,10 @@ export default function AdminPage({
   addEgitimKategorisi,
   updateEgitimKategorisi,
   deleteEgitimKategorisi,
+  addKurum,
+  updateKurum,
+  deleteKurum,
+  importKurumlar,
   addEgitmen,
   updateEgitmen,
   deleteEgitmen,
@@ -111,7 +137,14 @@ export default function AdminPage({
   const [trainerPage, setTrainerPage] = useState(1)
   const [newTrainer, setNewTrainer] = useState({
     ad: '',
-    kurum: '',
+    email: '',
+    uzmanlik: '',
+  })
+  const [internalTrainerSearch, setInternalTrainerSearch] = useState('')
+  const [internalTrainerPage, setInternalTrainerPage] = useState(1)
+  const [newInternalTrainer, setNewInternalTrainer] = useState({
+    ad: '',
+    birim: '',
     email: '',
     uzmanlik: '',
   })
@@ -123,11 +156,13 @@ export default function AdminPage({
   const [gmyDrafts, setGmyDrafts] = useState(() => buildDraftMap(gmyList))
   const [kategoriDrafts, setKategoriDrafts] = useState(() => buildDraftMap(egitimKategorileri))
   const [catalogDrafts, setCatalogDrafts] = useState(() => buildCatalogDraftMap(katalog))
-  const [trainerDrafts, setTrainerDrafts] = useState(() => buildTrainerDraftMap(egitmenListesi))
+  const [trainerDrafts, setTrainerDrafts] = useState(() => buildInstitutionDraftMap(kurumListesi))
+  const [internalTrainerDrafts, setInternalTrainerDrafts] = useState(() => buildInternalTrainerDraftMap(egitmenListesi))
   const [rateDrafts, setRateDrafts] = useState(() => ({ ...kurBilgileri }))
   const [isImporting, setIsImporting] = useState(false)
   const fileInputRef = useRef(null)
   const trainerFileInputRef = useRef(null)
+  const internalTrainerFileInputRef = useRef(null)
 
   useEffect(() => {
     setGmyDrafts(buildDraftMap(gmyList))
@@ -142,7 +177,11 @@ export default function AdminPage({
   }, [katalog])
 
   useEffect(() => {
-    setTrainerDrafts(buildTrainerDraftMap(egitmenListesi))
+    setTrainerDrafts(buildInstitutionDraftMap(kurumListesi))
+  }, [kurumListesi])
+
+  useEffect(() => {
+    setInternalTrainerDrafts(buildInternalTrainerDraftMap(egitmenListesi))
   }, [egitmenListesi])
 
   useEffect(() => {
@@ -222,20 +261,39 @@ export default function AdminPage({
   const filteredTrainers = useMemo(() => {
     const normalizedQuery = trainerSearch.trim().toLocaleLowerCase('tr-TR')
 
-    return egitmenListesi.filter((item) => {
+    return kurumListesi.filter((item) => {
       if (!normalizedQuery) {
         return true
       }
 
-      return [item.ad, item.kurum, item.email, item.uzmanlik]
+      return [item.ad, item.email, item.uzmanlik]
         .some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
     })
-  }, [egitmenListesi, trainerSearch])
+  }, [kurumListesi, trainerSearch])
 
   const trainerPageCount = getPageCount(filteredTrainers.length, TRAINER_PAGE_SIZE)
   const paginatedTrainers = useMemo(
     () => paginate(filteredTrainers, Math.min(trainerPage, trainerPageCount), TRAINER_PAGE_SIZE),
     [filteredTrainers, trainerPage, trainerPageCount],
+  )
+
+  const filteredInternalTrainers = useMemo(() => {
+    const normalizedQuery = internalTrainerSearch.trim().toLocaleLowerCase('tr-TR')
+
+    return egitmenListesi.filter((item) => {
+      if (!normalizedQuery) {
+        return true
+      }
+
+      return [item.ad, item.birim, item.email, item.uzmanlik]
+        .some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
+    })
+  }, [egitmenListesi, internalTrainerSearch])
+
+  const internalTrainerPageCount = getPageCount(filteredInternalTrainers.length, TRAINER_PAGE_SIZE)
+  const paginatedInternalTrainers = useMemo(
+    () => paginate(filteredInternalTrainers, Math.min(internalTrainerPage, internalTrainerPageCount), TRAINER_PAGE_SIZE),
+    [filteredInternalTrainers, internalTrainerPage, internalTrainerPageCount],
   )
 
   const talepYearSummary = useMemo(
@@ -297,14 +355,28 @@ export default function AdminPage({
 
   function handleAddTrainer() {
     try {
-      addEgitmen(newTrainer)
+      addKurum(newTrainer)
       setNewTrainer({
         ad: '',
-        kurum: '',
         email: '',
         uzmanlik: '',
       })
-      toast.success('Eğitmen listeye eklendi.')
+      toast.success('Kurum listeye eklendi.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleAddInternalTrainer() {
+    try {
+      addEgitmen(newInternalTrainer)
+      setNewInternalTrainer({
+        ad: '',
+        birim: '',
+        email: '',
+        uzmanlik: '',
+      })
+      toast.success('İç eğitmen listeye eklendi.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -404,10 +476,39 @@ export default function AdminPage({
         raw: true,
       })
 
-      const imported = importEgitmenler(mapExcelRowsToEgitmenler(rows))
-      toast.success(`${imported.length} eğitmen listeye yüklendi.`)
+      const imported = importKurumlar(mapExcelRowsToKurumlar(rows))
+      toast.success(`${imported.length} kurum listeye yüklendi.`)
     } catch (error) {
-      toast.error(error.message || 'Eğitmen listesi içeri aktarılamadı.')
+      toast.error(error.message || 'Kurum listesi içeri aktarılamadı.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
+  async function handleInternalTrainerImport(event) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
+      const sheetName = workbook.SheetNames[0]
+
+      if (!sheetName) {
+        throw new Error('Excel dosyasında okunacak sayfa bulunamadı.')
+      }
+
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+        defval: '',
+        raw: true,
+      })
+
+      const imported = importEgitmenler(mapExcelRowsToEgitmenler(rows))
+      toast.success(`${imported.length} iç eğitmen listeye yüklendi.`)
+    } catch (error) {
+      toast.error(error.message || 'İç eğitmen listesi içeri aktarılamadı.')
     } finally {
       event.target.value = ''
     }
@@ -442,8 +543,17 @@ export default function AdminPage({
 
   function handleSaveTrainer(itemId) {
     try {
-      updateEgitmen(itemId, trainerDrafts[itemId])
-      toast.success('Eğitmen kaydı güncellendi.')
+      updateKurum(itemId, trainerDrafts[itemId])
+      toast.success('Kurum kaydı güncellendi.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleSaveInternalTrainer(itemId) {
+    try {
+      updateEgitmen(itemId, internalTrainerDrafts[itemId])
+      toast.success('İç eğitmen kaydı güncellendi.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -478,8 +588,17 @@ export default function AdminPage({
 
   function handleDeleteTrainer(itemId) {
     try {
+      deleteKurum(itemId)
+      toast.success('Kurum kaydı kaldırıldı.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleDeleteInternalTrainer(itemId) {
+    try {
       deleteEgitmen(itemId)
-      toast.success('Eğitmen kaydı kaldırıldı.')
+      toast.success('İç eğitmen kaydı kaldırıldı.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -528,6 +647,10 @@ export default function AdminPage({
   useEffect(() => {
     setTrainerPage(1)
   }, [trainerSearch])
+
+  useEffect(() => {
+    setInternalTrainerPage(1)
+  }, [internalTrainerSearch])
 
   if (!isAdminAuthenticated) {
     return (
@@ -581,7 +704,11 @@ export default function AdminPage({
             <strong>{planlar.length}</strong>
           </Card>
           <Card className="mini-stat">
-            <span>Eğitmen Havuzu</span>
+            <span>Kurum Havuzu</span>
+            <strong>{kurumListesi.length}</strong>
+          </Card>
+          <Card className="mini-stat">
+            <span>İç Eğitmen</span>
             <strong>{egitmenListesi.length}</strong>
           </Card>
           <button
@@ -852,14 +979,18 @@ export default function AdminPage({
         <Card>
           <div className="section-heading section-heading--tight">
             <div>
-              <h3>Eğitmen Yönetimi</h3>
-              <p>Listeyi yükleyin, arayın ve kullanıcıların bulamadığı eğitmenleri elle ekleyin.</p>
+              <h3>Kurum Yönetimi</h3>
+              <p>Dış eğitim kurumlarını yükleyin, arayın ve kullanıcıların bulamadığı kurumları elle ekleyin.</p>
             </div>
             <div className="admin-controls-row">
               <button className="button button--secondary" onClick={() => trainerFileInputRef.current?.click()}>
                 <Upload size={16} />
-                Eğitmen Listesi Yükle
+                Kurum Listesi Yükle
               </button>
+              <a className="button button--secondary" href="/ornek-kurum-listesi.xlsx" download>
+                <Download size={16} />
+                Örnek Excel
+              </a>
               <input
                 ref={trainerFileInputRef}
                 className="sr-only"
@@ -872,37 +1003,33 @@ export default function AdminPage({
 
           <div className="filter-row">
             <label>
-              <span>Eğitmen Ara</span>
+              <span>Kurum Ara</span>
               <input
                 value={trainerSearch}
                 onChange={(event) => setTrainerSearch(event.target.value)}
-                placeholder="Ad, kurum, e-posta veya uzmanlık ile ara"
+                placeholder="Kurum adı, e-posta veya uzmanlık ile ara"
               />
             </label>
           </div>
 
           <div className="form-grid">
             <label>
-              <span>Eğitmen Adı</span>
-              <input value={newTrainer.ad} onChange={(event) => setNewTrainer((current) => ({ ...current, ad: event.target.value }))} placeholder="Örn. Ahmet Kaya" />
-            </label>
-            <label>
               <span>Kurum</span>
-              <input value={newTrainer.kurum} onChange={(event) => setNewTrainer((current) => ({ ...current, kurum: event.target.value }))} placeholder="Örn. ABC Akademi" />
+              <input value={newTrainer.ad} onChange={(event) => setNewTrainer((current) => ({ ...current, ad: event.target.value }))} placeholder="Örn. ABC Akademi" />
             </label>
             <label>
               <span>E-posta</span>
               <input value={newTrainer.email} onChange={(event) => setNewTrainer((current) => ({ ...current, email: event.target.value }))} placeholder="ornek@firma.com" />
             </label>
             <label>
-              <span>Uzmanlık</span>
+              <span>Hizmet Alanı</span>
               <input value={newTrainer.uzmanlik} onChange={(event) => setNewTrainer((current) => ({ ...current, uzmanlik: event.target.value }))} placeholder="Örn. Liderlik" />
             </label>
           </div>
           <div className="admin-gmy-card__actions">
             <button className="button" onClick={handleAddTrainer}>
               <Plus size={16} />
-              Eğitmen Ekle
+              Kurum Ekle
             </button>
           </div>
 
@@ -910,24 +1037,20 @@ export default function AdminPage({
             {paginatedTrainers.map((trainer) => (
               <Card key={trainer.id} className="admin-gmy-card">
                 <div className="admin-gmy-card__meta">
-                  <span className="eyebrow">Eğitmen</span>
+                  <span className="eyebrow">Kurum</span>
                   <strong>{trainer.ad}</strong>
-                  <small>{trainer.kurum || trainer.uzmanlik || 'Ek bilgi yok'}</small>
+                  <small>{trainer.uzmanlik || trainer.email || 'Ek bilgi yok'}</small>
                 </div>
                 <label>
-                  <span>Ad</span>
-                  <input value={trainerDrafts[trainer.id]?.ad || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], ad: event.target.value } }))} />
-                </label>
-                <label>
                   <span>Kurum</span>
-                  <input value={trainerDrafts[trainer.id]?.kurum || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], kurum: event.target.value } }))} />
+                  <input value={trainerDrafts[trainer.id]?.ad || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], ad: event.target.value } }))} />
                 </label>
                 <label>
                   <span>E-posta</span>
                   <input value={trainerDrafts[trainer.id]?.email || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], email: event.target.value } }))} />
                 </label>
                 <label>
-                  <span>Uzmanlık</span>
+                  <span>Hizmet Alanı</span>
                   <input value={trainerDrafts[trainer.id]?.uzmanlik || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], uzmanlik: event.target.value } }))} />
                 </label>
                 <div className="admin-gmy-card__actions">
@@ -950,6 +1073,116 @@ export default function AdminPage({
             </button>
             <span>{`Sayfa ${Math.min(trainerPage, trainerPageCount)} / ${trainerPageCount}`}</span>
             <button className="button button--secondary" disabled={trainerPage >= trainerPageCount} onClick={() => setTrainerPage((page) => Math.min(trainerPageCount, page + 1))}>
+              Sonraki
+            </button>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="section-heading section-heading--tight">
+            <div>
+              <h3>İç Eğitmen Yönetimi</h3>
+              <p>İç eğitmen havuzunu yükleyin, elle ekleyin ve dashboard ödül akışı için güncel tutun.</p>
+            </div>
+            <div className="admin-controls-row">
+              <button className="button button--secondary" onClick={() => internalTrainerFileInputRef.current?.click()}>
+                <Upload size={16} />
+                İç Eğitmen Listesi Yükle
+              </button>
+              <a className="button button--secondary" href="/ornek-ic-egitmen-listesi.xlsx" download>
+                <Download size={16} />
+                Örnek Excel
+              </a>
+              <input
+                ref={internalTrainerFileInputRef}
+                className="sr-only"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleInternalTrainerImport}
+              />
+            </div>
+          </div>
+
+          <div className="filter-row">
+            <label>
+              <span>İç Eğitmen Ara</span>
+              <input
+                value={internalTrainerSearch}
+                onChange={(event) => setInternalTrainerSearch(event.target.value)}
+                placeholder="Ad, birim, e-posta veya uzmanlık ile ara"
+              />
+            </label>
+          </div>
+
+          <div className="form-grid">
+            <label>
+              <span>İç Eğitmen Adı</span>
+              <input value={newInternalTrainer.ad} onChange={(event) => setNewInternalTrainer((current) => ({ ...current, ad: event.target.value }))} placeholder="Örn. Ayşe Demir" />
+            </label>
+            <label>
+              <span>Birim</span>
+              <input value={newInternalTrainer.birim} onChange={(event) => setNewInternalTrainer((current) => ({ ...current, birim: event.target.value }))} placeholder="Örn. BT Akademi" />
+            </label>
+            <label>
+              <span>E-posta</span>
+              <input value={newInternalTrainer.email} onChange={(event) => setNewInternalTrainer((current) => ({ ...current, email: event.target.value }))} placeholder="ornek@firma.com" />
+            </label>
+            <label>
+              <span>Uzmanlık</span>
+              <input value={newInternalTrainer.uzmanlik} onChange={(event) => setNewInternalTrainer((current) => ({ ...current, uzmanlik: event.target.value }))} placeholder="Örn. Veri Analitiği" />
+            </label>
+          </div>
+          <div className="admin-gmy-card__actions">
+            <button className="button" onClick={handleAddInternalTrainer}>
+              <Plus size={16} />
+              İç Eğitmen Ekle
+            </button>
+          </div>
+
+          <div className="admin-grid">
+            {paginatedInternalTrainers.map((trainer) => (
+              <Card key={trainer.id} className="admin-gmy-card">
+                <div className="admin-gmy-card__meta">
+                  <span className="eyebrow">İç Eğitmen</span>
+                  <strong>{trainer.ad}</strong>
+                  <small>{trainer.birim || trainer.uzmanlik || 'Ek bilgi yok'}</small>
+                </div>
+                <label>
+                  <span>Ad</span>
+                  <input value={internalTrainerDrafts[trainer.id]?.ad || ''} onChange={(event) => setInternalTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], ad: event.target.value } }))} />
+                </label>
+                <label>
+                  <span>Birim</span>
+                  <input value={internalTrainerDrafts[trainer.id]?.birim || ''} onChange={(event) => setInternalTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], birim: event.target.value } }))} />
+                </label>
+                <label>
+                  <span>E-posta</span>
+                  <input value={internalTrainerDrafts[trainer.id]?.email || ''} onChange={(event) => setInternalTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], email: event.target.value } }))} />
+                </label>
+                <label>
+                  <span>Uzmanlık</span>
+                  <input value={internalTrainerDrafts[trainer.id]?.uzmanlik || ''} onChange={(event) => setInternalTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], uzmanlik: event.target.value } }))} />
+                </label>
+                <div className="admin-gmy-card__actions">
+                  <button className="button" onClick={() => handleSaveInternalTrainer(trainer.id)}>
+                    <Save size={16} />
+                    Kaydet
+                  </button>
+                  <button className="button button--ghost" onClick={() => handleDeleteInternalTrainer(trainer.id)}>
+                    <Trash2 size={16} />
+                    Sil
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="pagination-bar">
+            <button className="button button--secondary" disabled={internalTrainerPage <= 1} onClick={() => setInternalTrainerPage((page) => Math.max(1, page - 1))}>
+              Önceki
+            </button>
+            <span>{`Sayfa ${Math.min(internalTrainerPage, internalTrainerPageCount)} / ${internalTrainerPageCount}`}</span>
+            <button className="button button--secondary" disabled={internalTrainerPage >= internalTrainerPageCount} onClick={() => setInternalTrainerPage((page) => Math.min(internalTrainerPageCount, page + 1))}>
               Sonraki
             </button>
           </div>

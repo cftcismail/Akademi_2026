@@ -3,13 +3,15 @@ import { Route, Routes } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import Header from './components/Layout/Header'
 import Sidebar from './components/Layout/Sidebar'
+import AppErrorBoundary from './components/ui/AppErrorBoundary'
 import useEgitimData from './hooks/useEgitimData'
-import { ADMIN_ROUTE } from './data/constants'
+import { ADMIN_ROUTE, IC_EGITMEN_DASHBOARD_ROUTE } from './data/constants'
 
 const Dashboard = lazy(() => import('./components/Dashboard/Dashboard'))
 const TaleplerPage = lazy(() => import('./components/Talepler/TalepListesi'))
 const EgitimPlaniPage = lazy(() => import('./components/EgitimPlani/EgitimPlani'))
 const Raporlar = lazy(() => import('./components/Raporlar/Raporlar'))
+const IcEgitmenDashboard = lazy(() => import('./components/IcEgitmenDashboard/IcEgitmenDashboard'))
 const CalisanDetay = lazy(() => import('./components/CalisanDetay'))
 const AdminPage = lazy(() => import('./components/Admin/AdminPage'))
 
@@ -36,51 +38,54 @@ function App() {
   }
 
   return (
-    <div className="app-shell app-shell--topnav">
-      <div className="top-chrome">
-        <Header
-          metrics={{
-            talepSayisi: egitimData.talepler.length,
-            planSayisi: egitimData.planlar.length,
+    <AppErrorBoundary>
+      <div className="app-shell app-shell--topnav">
+        <div className="top-chrome">
+          <Header
+            metrics={{
+              talepSayisi: egitimData.talepler.length,
+              planSayisi: egitimData.planlar.length,
+            }}
+          />
+          <Sidebar isAdminAuthenticated={isAdminAuthenticated} />
+        </div>
+        <div className="app-main app-main--topnav">
+          <main className="page-shell">
+            <Suspense fallback={<div className="surface-card page-loading">İçerik yükleniyor...</div>}>
+              <Routes>
+                <Route path="/" element={<Dashboard {...egitimData} />} />
+                <Route path="/talepler" element={<TaleplerPage {...egitimData} />} />
+                <Route path="/plan" element={<EgitimPlaniPage {...egitimData} />} />
+                <Route path="/raporlar" element={<Raporlar {...egitimData} />} />
+                <Route path={IC_EGITMEN_DASHBOARD_ROUTE} element={<IcEgitmenDashboard {...egitimData} />} />
+                <Route path="/calisanlar/:sicilNo" element={<CalisanDetay {...egitimData} />} />
+                <Route
+                  path={ADMIN_ROUTE}
+                  element={
+                    <AdminPage
+                      {...egitimData}
+                      isAdminAuthenticated={isAdminAuthenticated}
+                      onAuthenticatedChange={handleAdminAuthChange}
+                    />
+                  }
+                />
+              </Routes>
+            </Suspense>
+          </main>
+        </div>
+        <Toaster
+          position="top-right"
+          toastOptions={{
+            duration: 3200,
+            style: {
+              background: '#ffffff',
+              color: '#1a202c',
+              border: '1px solid #e2e8f0',
+            },
           }}
         />
-        <Sidebar isAdminAuthenticated={isAdminAuthenticated} />
       </div>
-      <div className="app-main app-main--topnav">
-        <main className="page-shell">
-          <Suspense fallback={<div className="surface-card page-loading">İçerik yükleniyor...</div>}>
-            <Routes>
-              <Route path="/" element={<Dashboard {...egitimData} />} />
-              <Route path="/talepler" element={<TaleplerPage {...egitimData} />} />
-              <Route path="/plan" element={<EgitimPlaniPage {...egitimData} />} />
-              <Route path="/raporlar" element={<Raporlar {...egitimData} />} />
-              <Route path="/calisanlar/:sicilNo" element={<CalisanDetay {...egitimData} />} />
-              <Route
-                path={ADMIN_ROUTE}
-                element={
-                  <AdminPage
-                    {...egitimData}
-                    isAdminAuthenticated={isAdminAuthenticated}
-                    onAuthenticatedChange={handleAdminAuthChange}
-                  />
-                }
-              />
-            </Routes>
-          </Suspense>
-        </main>
-      </div>
-      <Toaster
-        position="top-right"
-        toastOptions={{
-          duration: 3200,
-          style: {
-            background: '#ffffff',
-            color: '#1a202c',
-            border: '1px solid #e2e8f0',
-          },
-        }}
-      />
-    </div>
+    </AppErrorBoundary>
   )
 }
 

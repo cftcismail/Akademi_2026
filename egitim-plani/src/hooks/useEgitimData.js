@@ -6,6 +6,7 @@ import {
   GMY_LISTESI,
   LOCAL_STORAGE_KEYS,
   PARA_BIRIMLERI,
+  VARSAYILAN_KURUMLAR,
   VARSAYILAN_EGITMENLER,
   VARSAYILAN_KURLAR,
 } from '../data/constants'
@@ -98,13 +99,21 @@ function normalizeTalep(talep) {
 }
 
 function normalizePlan(plan) {
+  const legacyProvider = `${plan.egitimci || ''}`.trim()
+  const kurum = `${plan.kurum || ''}`.trim()
+  const icEgitim = Boolean(
+    plan.icEgitim ?? (!kurum && normalizeSignatureText(legacyProvider) === normalizeSignatureText('İç Eğitim')),
+  )
+
   return {
     ...plan,
     calisanKullaniciKodu: plan.calisanKullaniciKodu || '',
     gmy: plan.gmy || '',
     egitimKodu: `${plan.egitimKodu || ''}`.trim(),
     kategori: plan.kategori || 'Teknik',
-    egitimci: plan.egitimci || 'İç Eğitim',
+    icEgitim,
+    egitimci: icEgitim ? legacyProvider || 'İç Eğitim' : '',
+    kurum: icEgitim ? '' : kurum || legacyProvider,
     notlar: plan.notlar || '',
     maliyet: Number(plan.maliyet || 0),
     maliyetParaBirimi: `${plan.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase(),
@@ -127,9 +136,18 @@ function normalizeTrainerItem(item) {
   return {
     id: item.id || uuidv4(),
     ad: `${item.ad || item.egitimci || ''}`.trim(),
-    kurum: `${item.kurum || ''}`.trim(),
+    birim: `${item.birim || item.kurum || ''}`.trim(),
     email: `${item.email || ''}`.trim(),
     uzmanlik: `${item.uzmanlik || ''}`.trim(),
+  }
+}
+
+function normalizeInstitutionItem(item) {
+  return {
+    id: item.id || uuidv4(),
+    ad: `${item.ad || item.kurum || item.egitimci || ''}`.trim(),
+    email: `${item.email || ''}`.trim(),
+    uzmanlik: `${item.uzmanlik || item.hizmetAlani || ''}`.trim(),
   }
 }
 
@@ -151,6 +169,33 @@ function normalizeTrainerList(trainerList, planlar) {
 
     names.add(normalizedName)
     nextList.push(normalizeTrainerItem({ ad: name }))
+  })
+
+  return nextList
+}
+
+function normalizeInstitutionList(kurumListesi, planlar) {
+  const normalizedList = (kurumListesi?.length ? kurumListesi : VARSAYILAN_KURUMLAR)
+    .map((item) => normalizeInstitutionItem(item))
+    .filter((item) => item.ad)
+
+  const names = new Set(normalizedList.map((item) => normalizeSignatureText(item.ad)))
+  const nextList = [...normalizedList]
+
+  planlar.forEach((plan) => {
+    if (plan.icEgitim) {
+      return
+    }
+
+    const kurum = `${plan.kurum || plan.egitimci || ''}`.trim()
+    const normalizedName = normalizeSignatureText(kurum)
+
+    if (!kurum || names.has(normalizedName)) {
+      return
+    }
+
+    names.add(normalizedName)
+    nextList.push(normalizeInstitutionItem({ ad: kurum }))
   })
 
   return nextList
@@ -322,6 +367,14 @@ function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlan
     throw new Error('En az bir eğitim seçilmelidir.')
   }
 
+  if (ortakAlanlar.icEgitim && !`${ortakAlanlar.egitimci || ''}`.trim()) {
+    throw new Error('İç eğitim için bir iç eğitmen seçin veya yazın.')
+  }
+
+  if (!ortakAlanlar.icEgitim && !`${ortakAlanlar.kurum || ''}`.trim()) {
+    throw new Error('Dış eğitim için bir kurum seçin veya yazın.')
+  }
+
   const planlanmaTarihi = ortakAlanlar.planlanmaTarihi || getToday()
   const egitimTarihi = ortakAlanlar.egitimTarihi || getToday()
 
@@ -343,7 +396,9 @@ function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlan
       egitimTarihi,
       ...getPlanDateFields(egitimTarihi),
       sure: ortakAlanlar.sure,
-      egitimci: ortakAlanlar.egitimci,
+      icEgitim: Boolean(ortakAlanlar.icEgitim),
+      egitimci: ortakAlanlar.icEgitim ? ortakAlanlar.egitimci : '',
+      kurum: ortakAlanlar.icEgitim ? '' : ortakAlanlar.kurum,
       maliyet: Number(ortakAlanlar.maliyet || 0),
       maliyetParaBirimi: `${ortakAlanlar.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase(),
       dovizKuru: Number(ortakAlanlar.dovizKuru || 1),
@@ -360,6 +415,10 @@ export default function useEgitimData() {
   const [egitimKategorileri, setEgitimKategorileri] = useLocalStorage(
     LOCAL_STORAGE_KEYS.egitimKategorileri,
     EGITIM_KATEGORILERI,
+  )
+  const [kurumListesi, setKurumListesi] = useLocalStorage(
+    LOCAL_STORAGE_KEYS.kurumListesi,
+    VARSAYILAN_KURUMLAR,
   )
   const [egitmenListesi, setEgitmenListesi] = useLocalStorage(
     LOCAL_STORAGE_KEYS.egitmenListesi,
@@ -407,6 +466,11 @@ export default function useEgitimData() {
       return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
     })
 
+    setKurumListesi((current) => {
+      const cleaned = normalizeInstitutionList(current, planlar)
+      return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
+    })
+
     setKurBilgileri((current) => {
       const cleaned = normalizeCurrencyRates(current)
       return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
@@ -418,11 +482,31 @@ export default function useEgitimData() {
     setEgitmenListesi,
     setGmyList,
     setKatalog,
+    setKurumListesi,
     setKurBilgileri,
     setPlanlar,
     setTalepler,
     talepler,
   ])
+
+  function addKurum(payload) {
+    const nextInstitution = normalizeInstitutionItem({ id: uuidv4(), ...payload })
+
+    if (!nextInstitution.ad) {
+      throw new Error('Kurum adı boş olamaz.')
+    }
+
+    const duplicateExists = kurumListesi.some(
+      (item) => normalizeSignatureText(item.ad) === normalizeSignatureText(nextInstitution.ad),
+    )
+
+    if (duplicateExists) {
+      throw new Error('Bu isimde bir kurum zaten kayıtlı.')
+    }
+
+    setKurumListesi((current) => [nextInstitution, ...current])
+    return nextInstitution
+  }
 
   function addGmy(name) {
     const nextName = `${name || ''}`.trim()
@@ -461,7 +545,7 @@ export default function useEgitimData() {
     })
 
     if (!nextTrainer.ad) {
-      throw new Error('Eğitmen adı boş olamaz.')
+      throw new Error('İç eğitmen adı boş olamaz.')
     }
 
     const duplicateExists = egitmenListesi.some(
@@ -469,7 +553,7 @@ export default function useEgitimData() {
     )
 
     if (duplicateExists) {
-      throw new Error('Bu isimde bir eğitmen zaten kayıtlı.')
+      throw new Error('Bu isimde bir iç eğitmen zaten kayıtlı.')
     }
 
     setEgitmenListesi((current) => [nextTrainer, ...current])
@@ -480,7 +564,7 @@ export default function useEgitimData() {
     const currentTrainer = egitmenListesi.find((item) => item.id === trainerId)
 
     if (!currentTrainer) {
-      throw new Error('Güncellenecek eğitmen bulunamadı.')
+      throw new Error('Güncellenecek iç eğitmen bulunamadı.')
     }
 
     const nextTrainer = normalizeTrainerItem({
@@ -490,7 +574,7 @@ export default function useEgitimData() {
     })
 
     if (!nextTrainer.ad) {
-      throw new Error('Eğitmen adı boş olamaz.')
+      throw new Error('İç eğitmen adı boş olamaz.')
     }
 
     const duplicateExists = egitmenListesi.some(
@@ -498,13 +582,13 @@ export default function useEgitimData() {
     )
 
     if (duplicateExists) {
-      throw new Error('Bu isimde başka bir eğitmen zaten kayıtlı.')
+      throw new Error('Bu isimde başka bir iç eğitmen zaten kayıtlı.')
     }
 
     setEgitmenListesi((current) => current.map((item) => (item.id === trainerId ? nextTrainer : item)))
     setPlanlar((current) =>
       current.map((item) =>
-        normalizeSignatureText(item.egitimci) === normalizeSignatureText(currentTrainer.ad)
+        item.icEgitim && normalizeSignatureText(item.egitimci) === normalizeSignatureText(currentTrainer.ad)
           ? { ...item, egitimci: nextTrainer.ad }
           : item,
       ),
@@ -517,15 +601,15 @@ export default function useEgitimData() {
     const targetTrainer = egitmenListesi.find((item) => item.id === trainerId)
 
     if (!targetTrainer) {
-      throw new Error('Silinecek eğitmen bulunamadı.')
+      throw new Error('Silinecek iç eğitmen bulunamadı.')
     }
 
     const isUsed = planlar.some(
-      (item) => normalizeSignatureText(item.egitimci) === normalizeSignatureText(targetTrainer.ad),
+      (item) => item.icEgitim && normalizeSignatureText(item.egitimci) === normalizeSignatureText(targetTrainer.ad),
     )
 
     if (isUsed) {
-      throw new Error('Bu eğitmen aktif planlarda kullanılıyor. Önce plan kayıtlarını güncelleyin.')
+      throw new Error('Bu iç eğitmen aktif planlarda kullanılıyor. Önce plan kayıtlarını güncelleyin.')
     }
 
     setEgitmenListesi((current) => current.filter((item) => item.id !== trainerId))
@@ -548,10 +632,89 @@ export default function useEgitimData() {
     })
 
     if (!records.length) {
-      throw new Error('İçe aktarılacak yeni eğitmen bulunamadı.')
+      throw new Error('İçe aktarılacak yeni iç eğitmen bulunamadı.')
     }
 
     setEgitmenListesi((current) => [...records, ...current])
+    return records
+  }
+
+  function updateKurum(kurumId, payload) {
+    const currentInstitution = kurumListesi.find((item) => item.id === kurumId)
+
+    if (!currentInstitution) {
+      throw new Error('Güncellenecek kurum bulunamadı.')
+    }
+
+    const nextInstitution = normalizeInstitutionItem({
+      ...currentInstitution,
+      ...payload,
+      id: currentInstitution.id,
+    })
+
+    if (!nextInstitution.ad) {
+      throw new Error('Kurum adı boş olamaz.')
+    }
+
+    const duplicateExists = kurumListesi.some(
+      (item) => item.id !== kurumId && normalizeSignatureText(item.ad) === normalizeSignatureText(nextInstitution.ad),
+    )
+
+    if (duplicateExists) {
+      throw new Error('Bu isimde başka bir kurum zaten kayıtlı.')
+    }
+
+    setKurumListesi((current) => current.map((item) => (item.id === kurumId ? nextInstitution : item)))
+    setPlanlar((current) =>
+      current.map((item) =>
+        !item.icEgitim && normalizeSignatureText(item.kurum) === normalizeSignatureText(currentInstitution.ad)
+          ? { ...item, kurum: nextInstitution.ad }
+          : item,
+      ),
+    )
+
+    return nextInstitution
+  }
+
+  function deleteKurum(kurumId) {
+    const targetInstitution = kurumListesi.find((item) => item.id === kurumId)
+
+    if (!targetInstitution) {
+      throw new Error('Silinecek kurum bulunamadı.')
+    }
+
+    const isUsed = planlar.some(
+      (item) => !item.icEgitim && normalizeSignatureText(item.kurum) === normalizeSignatureText(targetInstitution.ad),
+    )
+
+    if (isUsed) {
+      throw new Error('Bu kurum aktif planlarda kullanılıyor. Önce plan kayıtlarını güncelleyin.')
+    }
+
+    setKurumListesi((current) => current.filter((item) => item.id !== kurumId))
+  }
+
+  function importKurumlar(payloads) {
+    const existingNames = new Set(kurumListesi.map((item) => normalizeSignatureText(item.ad)))
+    const records = []
+
+    payloads.forEach((payload) => {
+      const nextInstitution = normalizeInstitutionItem({ id: uuidv4(), ...payload })
+      const normalizedName = normalizeSignatureText(nextInstitution.ad)
+
+      if (!nextInstitution.ad || existingNames.has(normalizedName)) {
+        return
+      }
+
+      existingNames.add(normalizedName)
+      records.push(nextInstitution)
+    })
+
+    if (!records.length) {
+      throw new Error('İçe aktarılacak yeni kurum bulunamadı.')
+    }
+
+    setKurumListesi((current) => [...records, ...current])
     return records
   }
 
@@ -959,9 +1122,16 @@ export default function useEgitimData() {
           return plan
         }
 
+        const icEgitim = Boolean(updates.icEgitim ?? plan.icEgitim)
+
         const nextPlan = {
           ...plan,
           ...updates,
+          icEgitim,
+          egitimci: icEgitim
+            ? `${updates.egitimci ?? (plan.egitimci || 'İç Eğitim')}`.trim() || 'İç Eğitim'
+            : '',
+          kurum: icEgitim ? '' : `${updates.kurum ?? (plan.kurum || plan.egitimci || '')}`.trim(),
           maliyet: Number((updates.maliyet ?? plan.maliyet) || 0),
           maliyetParaBirimi: `${updates.maliyetParaBirimi || plan.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase(),
           dovizKuru: Number((updates.dovizKuru ?? plan.dovizKuru) || 1),
@@ -1065,6 +1235,7 @@ export default function useEgitimData() {
     planlar,
     gmyList,
     egitimKategorileri,
+    kurumListesi,
     egitmenListesi,
     kurBilgileri,
     addTalep,
@@ -1084,6 +1255,10 @@ export default function useEgitimData() {
     addEgitimKategorisi,
     updateEgitimKategorisi,
     deleteEgitimKategorisi,
+    addKurum,
+    updateKurum,
+    deleteKurum,
+    importKurumlar,
     addEgitmen,
     updateEgitmen,
     deleteEgitmen,
