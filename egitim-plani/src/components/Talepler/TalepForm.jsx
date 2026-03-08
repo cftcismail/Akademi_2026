@@ -19,6 +19,7 @@ function createInitialForm(gmyList, kategoriList, defaultTalepKaynagi) {
     yoneticiAdi: '',
     yoneticiEmail: '',
     gmy: gmyList[0] || '',
+    calisanLokasyon: '',
     calisanAdi: '',
     calisanSicil: '',
     calisanKullaniciKodu: '',
@@ -173,6 +174,15 @@ export default function TalepForm({
                   </option>
                 ))}
               </select>
+            </label>
+            <label>
+              <span>Lokasyon</span>
+              <input
+                value={activeForm.calisanLokasyon}
+                onChange={(event) => setForm({ ...activeForm, calisanLokasyon: event.target.value })}
+                placeholder="Örn. Ankara / Sincan"
+                required
+              />
             </label>
           </div>
         </section>

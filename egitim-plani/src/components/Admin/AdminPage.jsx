@@ -10,6 +10,8 @@ import { PARA_BIRIMLERI } from '../../data/constants'
 
 const CATALOG_PAGE_SIZE = 8
 const TRAINER_PAGE_SIZE = 10
+const IMPORT_BATCH_SIZE = 250
+const MAX_VISIBLE_IMPORT_ISSUES = 250
 
 const ADMIN_PASSWORD = 'Akademi.123'
 
@@ -151,6 +153,7 @@ export default function AdminPage({
   const [selectedTalepYear, setSelectedTalepYear] = useState(new Date().getFullYear())
   const [showTalepForm, setShowTalepForm] = useState(false)
   const [validationIssues, setValidationIssues] = useState([])
+  const [hiddenValidationIssueCount, setHiddenValidationIssueCount] = useState(0)
   const [showClearPlansModal, setShowClearPlansModal] = useState(false)
   const [yearToDelete, setYearToDelete] = useState(null)
   const [gmyDrafts, setGmyDrafts] = useState(() => buildDraftMap(gmyList))
@@ -160,6 +163,7 @@ export default function AdminPage({
   const [internalTrainerDrafts, setInternalTrainerDrafts] = useState(() => buildInternalTrainerDraftMap(egitmenListesi))
   const [rateDrafts, setRateDrafts] = useState(() => ({ ...kurBilgileri }))
   const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
   const fileInputRef = useRef(null)
   const trainerFileInputRef = useRef(null)
   const internalTrainerFileInputRef = useRef(null)
@@ -416,6 +420,7 @@ export default function AdminPage({
     }
 
     setIsImporting(true)
+    setImportProgress({ processed: 0, total: 0 })
 
     try {
       const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
@@ -430,17 +435,25 @@ export default function AdminPage({
         raw: true,
       })
 
-      const result = importTalepler(
+      setImportProgress({ processed: 0, total: rows.length })
+
+      const result = await importTalepler(
         mapExcelRowsToTalepler(rows).map((payload) => ({
           ...payload,
           talepYili: selectedTalepYear,
         })),
+        {
+          batchSize: IMPORT_BATCH_SIZE,
+          maxIssues: MAX_VISIBLE_IMPORT_ISSUES,
+          onProgress: setImportProgress,
+        },
       )
 
       setValidationIssues(result.issues || [])
+      setHiddenValidationIssueCount(result.hiddenIssueCount || 0)
 
-      if (result.importedCount > 0 && result.issues.length > 0) {
-        toast(`${result.importedCount} talep aktarıldı, ${result.issues.length} satır uyarıya düştü.`, {
+      if (result.importedCount > 0 && result.totalIssueCount > 0) {
+        toast(`${result.importedCount} talep aktarıldı, ${result.totalIssueCount} satır uyarıya düştü.`, {
           icon: '!',
         })
       } else if (result.importedCount > 0) {
@@ -453,6 +466,7 @@ export default function AdminPage({
     } finally {
       event.target.value = ''
       setIsImporting(false)
+      setImportProgress({ processed: 0, total: 0 })
     }
   }
 
@@ -612,6 +626,7 @@ export default function AdminPage({
   function handleIssuesModal(nextOpen) {
     if (!nextOpen) {
       setValidationIssues([])
+      setHiddenValidationIssueCount(0)
     }
   }
 
@@ -1248,7 +1263,9 @@ export default function AdminPage({
             </a>
             <button className="button button--secondary" onClick={() => fileInputRef.current?.click()} disabled={isImporting}>
               <Upload size={16} />
-              {isImporting ? 'İçe aktarılıyor...' : 'Excel Yükle'}
+              {isImporting
+                ? `İçe aktarılıyor${importProgress.total ? ` (%${Math.round((importProgress.processed / importProgress.total) * 100)})` : '...'}`
+                : 'Excel Yükle'}
             </button>
             <button className="button" onClick={() => setShowTalepForm(true)}>
               <Plus size={16} />
@@ -1378,6 +1395,11 @@ export default function AdminPage({
         description="Eklenmeyen veya atlanan kayıtlar aşağıda listelenir."
         maxWidth={920}
       >
+        {hiddenValidationIssueCount > 0 ? (
+          <p className="modal-description">
+            {`Performans için yalnızca ilk ${validationIssues.length} uyarı gösteriliyor. ${hiddenValidationIssueCount} ek satır daha uyarıya düştü.`}
+          </p>
+        ) : null}
         <div className="table-wrapper">
           <table className="data-table">
             <thead>

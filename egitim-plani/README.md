@@ -113,14 +113,17 @@ Talepler ekranındaki yükleme alanı `.xlsx`, `.xls` ve `.csv` dosyalarını ka
 - `Yönetici Adı`
 - `Yönetici E-posta`
 - `GMY`
+- `Lokasyon`
 - `Çalışan Adı`
 - `Çalışan Sicil No`
 - `Çalışan Kullanıcı Kodu`
 - `Notlar`
-- `Eğitim 1 Adı`, `Eğitim 1 Kategori`
-- `Eğitim 2 Adı`, `Eğitim 2 Kategori`
-- `Eğitim 3 Adı`, `Eğitim 3 Kategori`
-- `Eğitim 4 Adı`, `Eğitim 4 Kategori`
+- `Eğitim 1 Kodu`, `Eğitim 1 Adı`, `Eğitim 1 Kategori`
+- `Eğitim 2 Kodu`, `Eğitim 2 Adı`, `Eğitim 2 Kategori`
+- `Eğitim 3 Kodu`, `Eğitim 3 Adı`, `Eğitim 3 Kategori`
+- `Eğitim 4 Kodu`, `Eğitim 4 Adı`, `Eğitim 4 Kategori`
+
+Lokasyon bilgisi talep, planlama, dashboard ve raporlarda birlikte kullanılır. Planlama ekranında girilen bütçe artık kişi başı değil, ilgili planlama işleminin toplam bütçesi olarak saklanır; dashboard ve raporlar bu toplamı seçili kayıt adedine göre dağıtarak gösterir.
 
 ## Notlar
 

@@ -16,9 +16,10 @@ import {
   formatCurrency,
   formatDate,
   formatEgitimLabel,
+  getLokasyonLabel,
+  getPlanOriginalCostShare,
   getPlanCostInTry,
   getPlanProviderLabel,
-  getTalepKaynagiLabel,
   summarizeDemandCoverage,
   getUniqueYears,
 } from '../../utils/helpers'
@@ -38,19 +39,32 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
   const years = getUniqueYears(planlar, talepler)
   const [selectedYear, setSelectedYear] = useState(years[0] || new Date().getFullYear())
   const [selectedGmy, setSelectedGmy] = useState('Tümü')
+  const [selectedLocation, setSelectedLocation] = useState('Tümü')
+  const [trainingFilter, setTrainingFilter] = useState('')
+  const [coverageStatus, setCoverageStatus] = useState('Tümü')
   const dashboardRef = useRef(null)
   const activeYear = years.includes(selectedYear) ? selectedYear : years[0] || new Date().getFullYear()
   const activeGmy = selectedGmy === 'Tümü' || gmyList.includes(selectedGmy) ? selectedGmy : 'Tümü'
+  const locationOptions = [
+    'Tümü',
+    ...new Set([...talepler.map((talep) => getLokasyonLabel(talep)), ...planlar.map((plan) => getLokasyonLabel(plan))].filter(Boolean)),
+  ]
+  const activeLocation = selectedLocation === 'Tümü' || locationOptions.includes(selectedLocation) ? selectedLocation : 'Tümü'
   const today = new Date()
   const nextThirtyDays = addDays(today, 30)
 
   const filteredPlans = planlar.filter(
-    (plan) => plan.egitimYili === Number(activeYear) && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
+    (plan) =>
+      plan.egitimYili === Number(activeYear) &&
+      (activeGmy === 'Tümü' || plan.gmy === activeGmy) &&
+      (activeLocation === 'Tümü' || getLokasyonLabel(plan) === activeLocation),
   )
 
   const currentYearRequests = talepler.filter(
     (talep) =>
-      Number(talep.talepYili) === Number(activeYear) && (activeGmy === 'Tümü' || talep.gmy === activeGmy),
+      Number(talep.talepYili) === Number(activeYear) &&
+      (activeGmy === 'Tümü' || talep.gmy === activeGmy) &&
+      (activeLocation === 'Tümü' || getLokasyonLabel(talep) === activeLocation),
   )
 
   const filteredCatalogCount =
@@ -68,9 +82,25 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
   }
 
   const pendingRequestCount = currentYearRequests.filter((talep) => talep.durum === 'beklemede').length
-  const annualRequestCount = currentYearRequests.filter((talep) => getTalepKaynagiLabel(talep) === 'Yıllık Talep').length
-  const individualRequestCount = currentYearRequests.filter((talep) => getTalepKaynagiLabel(talep) === 'Bireysel Talep').length
   const demandSummary = summarizeDemandCoverage(currentYearRequests, filteredPlans)
+  const normalizedTrainingFilter = trainingFilter.trim().toLocaleLowerCase('tr-TR')
+  const filteredCoverageRows = demandSummary.annualCoverageRows.filter((item) => {
+    const matchesTraining =
+      !normalizedTrainingFilter ||
+      [item.egitimAdi, item.egitimKodu, item.kategori].some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedTrainingFilter))
+    const matchesStatus =
+      coverageStatus === 'Tümü' ||
+      (coverageStatus === 'Planlananlar' && item.plan > 0) ||
+      (coverageStatus === 'Planlanmayanlar' && item.plan === 0) ||
+      (coverageStatus === 'Kısmi' && item.plan > 0 && item.plan < item.talep) ||
+      (coverageStatus === 'Tam Karşılanan' && item.plan >= item.talep)
+
+    return matchesTraining && matchesStatus
+  })
+  const filteredExternalPlans = demandSummary.externalPlanRows.filter((item) =>
+    !normalizedTrainingFilter ||
+    [item.egitimAdi, item.egitimKodu, item.kategori].some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedTrainingFilter)),
+  )
   const completionCount = filteredPlans.filter((plan) => plan.durum === 'tamamlandı').length
   const completionRate = filteredPlans.length ? (completionCount / filteredPlans.length) * 100 : 0
   const totalBudget = filteredPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)
@@ -94,8 +124,14 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
     },
     {
       label: 'Yıllık Talep Karşılama',
-      value: formatPercent(demandSummary.annualCoverageRate),
-      meta: `${demandSummary.annualCoveredDemandCount}/${demandSummary.annualDemandCount} eğitim talebi planlandı`,
+      value: formatPercent(
+        filteredCoverageRows.reduce((total, item) => total + item.talep, 0)
+          ? (filteredCoverageRows.reduce((total, item) => total + item.plan, 0) /
+              filteredCoverageRows.reduce((total, item) => total + item.talep, 0)) *
+              100
+          : 0,
+      ),
+      meta: `${filteredCoverageRows.reduce((total, item) => total + item.plan, 0)}/${filteredCoverageRows.reduce((total, item) => total + item.talep, 0)} eğitim talebi planlandı`,
     },
     {
       label: 'Tamamlanma Oranı',
@@ -116,8 +152,8 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
     },
     {
       label: 'Plan Dışı Planlama',
-      value: demandSummary.externalPlannedCount,
-      meta: `${demandSummary.externalPlannedTitleCount} başlık yıllık talep dışı`,
+      value: filteredExternalPlans.reduce((total, item) => total + item.plan, 0),
+      meta: `${filteredExternalPlans.length} başlık yıllık talep dışı`,
     },
     {
       label: 'Toplam Bütçe',
@@ -143,19 +179,24 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
 
   const comparisonCards = [
     {
-      label: `${activeYear} Yıllık Talep`,
-      current: annualRequestCount,
-      meta: `${demandSummary.annualRequestTitleCount} eğitim başlığı talep edildi`,
+      label: 'Filtreli Başlık',
+      current: filteredCoverageRows.length,
+      meta: `${demandSummary.annualRequestTitleCount} yıllık talep başlığı içinde`,
     },
     {
-      label: `${activeYear} Bireysel Talep`,
-      current: individualRequestCount,
-      meta: `${demandSummary.individualDemandCount} eğitim ihtiyacı, ${demandSummary.individualPlannedCount} plan`,
+      label: 'Planlanan Başlık',
+      current: filteredCoverageRows.filter((item) => item.plan > 0).length,
+      meta: `${filteredCoverageRows.length ? Math.round((filteredCoverageRows.filter((item) => item.plan > 0).length / filteredCoverageRows.length) * 100) : 0}% başlıkta plan var`,
     },
     {
-      label: 'Yıllık Talep Dışı Plan',
-      current: demandSummary.externalPlannedCount,
-      meta: `${demandSummary.externalPlannedTitleCount} eğitim başlığı yıllık talepte yok`,
+      label: 'Planlanmayan Başlık',
+      current: filteredCoverageRows.filter((item) => item.plan === 0).length,
+      meta: 'Filtre içinde henüz planı olmayan eğitim başlıkları',
+    },
+    {
+      label: 'Yıllık Talep Dışı Başlık',
+      current: filteredExternalPlans.length,
+      meta: `${filteredExternalPlans.reduce((total, item) => total + item.plan, 0)} plan yıllık talep dışında`,
     },
   ]
 
@@ -233,8 +274,8 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
     }))
     .sort((left, right) => right.talep - left.talep)
 
-  const demandCoverage = demandSummary.annualCoverageRows.slice(0, 8)
-  const externalPlans = demandSummary.externalPlanRows.slice(0, 8)
+  const demandCoverage = filteredCoverageRows.slice(0, 8)
+  const externalPlans = filteredExternalPlans.slice(0, 8)
 
   const upcomingPlans = filteredPlans
     .filter((plan) => {
@@ -292,7 +333,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
       }
 
       accumulator[currency].plan += 1
-      accumulator[currency].toplam += Number(plan.maliyet || 0)
+      accumulator[currency].toplam += getPlanOriginalCostShare(plan)
       accumulator[currency].toplamTl += getPlanCostInTry(plan, kurBilgileri)
       return accumulator
     }, {}),
@@ -354,11 +395,43 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilg
               ))}
             </select>
           </label>
+          <label>
+            <span>Lokasyon</span>
+            <select value={activeLocation} onChange={(event) => setSelectedLocation(event.target.value)}>
+              {locationOptions.map((location) => (
+                <option key={location} value={location}>
+                  {location}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="button button--secondary" onClick={handleDownloadPdf}>
             <Download size={16} />
             PDF İndir
           </button>
         </div>
+      </section>
+
+      <section className="filter-panel">
+        <label>
+          <span>Eğitim Adı / Kodu</span>
+          <input
+            type="search"
+            value={trainingFilter}
+            onChange={(event) => setTrainingFilter(event.target.value)}
+            placeholder="Eğitim adı veya kodu ile filtrele"
+          />
+        </label>
+        <label>
+          <span>Planlama Durumu</span>
+          <select value={coverageStatus} onChange={(event) => setCoverageStatus(event.target.value)}>
+            <option value="Tümü">Tümü</option>
+            <option value="Planlananlar">Planlananlar</option>
+            <option value="Planlanmayanlar">Planlanmayanlar</option>
+            <option value="Kısmi">Kısmi</option>
+            <option value="Tam Karşılanan">Tam Karşılanan</option>
+          </select>
+        </label>
       </section>
 
       <section className="stats-grid">

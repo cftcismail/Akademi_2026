@@ -54,7 +54,9 @@ export function getExchangeRate(currency, currencyRates = {}) {
 
 export function getPlanCostInTry(plan, currencyRates = {}) {
   const currency = `${plan?.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase()
-  const originalCost = Number(plan?.maliyet || 0)
+  const totalOriginalCost = Number(plan?.toplamMaliyet ?? plan?.maliyet ?? 0)
+  const shareCount = Math.max(1, Number(plan?.butcePaylasimAdedi || 1))
+  const originalCost = totalOriginalCost / shareCount
   const rate = Number(plan?.dovizKuru || getExchangeRate(currency, currencyRates) || 1)
 
   return currency === 'TRY' ? originalCost : originalCost * rate
@@ -62,8 +64,21 @@ export function getPlanCostInTry(plan, currencyRates = {}) {
 
 export function formatPlanOriginalCost(plan) {
   const currency = `${plan?.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase()
-  const originalCost = Number(plan?.maliyet || 0)
+  const totalOriginalCost = Number(plan?.toplamMaliyet ?? plan?.maliyet ?? 0)
+  const shareCount = Math.max(1, Number(plan?.butcePaylasimAdedi || 1))
+  const originalCost = totalOriginalCost / shareCount
   return formatCurrency(originalCost, currency)
+}
+
+export function formatPlanTotalBudget(plan) {
+  const currency = `${plan?.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase()
+  return formatCurrency(Number(plan?.toplamMaliyet ?? plan?.maliyet ?? 0), currency)
+}
+
+export function getPlanOriginalCostShare(plan) {
+  const totalOriginalCost = Number(plan?.toplamMaliyet ?? plan?.maliyet ?? 0)
+  const shareCount = Math.max(1, Number(plan?.butcePaylasimAdedi || 1))
+  return totalOriginalCost / shareCount
 }
 
 export function getPlanProviderLabel(plan) {
@@ -155,6 +170,10 @@ export function buildTalepDuplicateKey(payload) {
 
 export function getTalepKaynagiLabel(talep) {
   return `${talep?.talepKaynagi || 'Yıllık Talep'}`.trim() || 'Yıllık Talep'
+}
+
+export function getLokasyonLabel(record) {
+  return `${record?.calisanLokasyon || ''}`.trim() || 'Lokasyon Yok'
 }
 
 export function summarizeDemandCoverage(talepler = [], planlar = []) {

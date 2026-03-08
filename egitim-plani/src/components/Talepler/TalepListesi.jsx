@@ -22,6 +22,11 @@ export default function TaleplerPage({
   const [selectedTalep, setSelectedTalep] = useState(null)
   const [planningTalep, setPlanningTalep] = useState(null)
   const [showTalepForm, setShowTalepForm] = useState(false)
+  const [searchQuery, setSearchQuery] = useState('')
+  const [selectedManager, setSelectedManager] = useState('Tümü')
+  const [selectedLocation, setSelectedLocation] = useState('Tümü')
+  const [selectedSource, setSelectedSource] = useState('Tümü')
+  const [selectedStatus, setSelectedStatus] = useState('Tümü')
   const talepYillari = useMemo(
     () => [...new Set(talepler.map((talep) => talep.talepYili || new Date().getFullYear()))].sort((a, b) => b - a),
     [talepler],
@@ -29,7 +34,40 @@ export default function TaleplerPage({
   const [selectedYear, setSelectedYear] = useState(talepYillari[0] || new Date().getFullYear())
 
   const activeYear = talepYillari.includes(selectedYear) ? selectedYear : talepYillari[0] || new Date().getFullYear()
-  const visibleTalepler = talepler.filter((talep) => (talep.talepYili || new Date().getFullYear()) === activeYear)
+  const yearTalepler = talepler.filter((talep) => (talep.talepYili || new Date().getFullYear()) === activeYear)
+  const managerOptions = useMemo(() => ['Tümü', ...new Set(yearTalepler.map((talep) => talep.yoneticiAdi).filter(Boolean))], [yearTalepler])
+  const locationOptions = useMemo(() => ['Tümü', ...new Set(yearTalepler.map((talep) => talep.calisanLokasyon).filter(Boolean))], [yearTalepler])
+  const activeManager = selectedManager === 'Tümü' || managerOptions.includes(selectedManager) ? selectedManager : 'Tümü'
+  const activeLocation = selectedLocation === 'Tümü' || locationOptions.includes(selectedLocation) ? selectedLocation : 'Tümü'
+  const visibleTalepler = useMemo(() => {
+    const normalizedQuery = searchQuery.trim().toLocaleLowerCase('tr-TR')
+
+    return yearTalepler.filter((talep) => {
+      const matchesManager = activeManager === 'Tümü' || talep.yoneticiAdi === activeManager
+      const matchesLocation = activeLocation === 'Tümü' || (talep.calisanLokasyon || '') === activeLocation
+      const matchesSource = selectedSource === 'Tümü' || getTalepKaynagiLabel(talep) === selectedSource
+      const matchesStatus = selectedStatus === 'Tümü' || talep.durum === selectedStatus
+
+      if (!matchesManager || !matchesLocation || !matchesSource || !matchesStatus) {
+        return false
+      }
+
+      if (!normalizedQuery) {
+        return true
+      }
+
+      return [
+        talep.calisanAdi,
+        talep.calisanSicil,
+        talep.calisanKullaniciKodu,
+        talep.yoneticiAdi,
+        talep.yoneticiEmail,
+        talep.gmy,
+        talep.calisanLokasyon,
+        ...talep.egitimler.map((egitim) => formatEgitimLabel(egitim)),
+      ].some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
+    })
+  }, [activeLocation, activeManager, searchQuery, selectedSource, selectedStatus, yearTalepler])
 
   const bekleyenTalepSayisi = visibleTalepler.filter((talep) => talep.durum === 'beklemede').length
   const planlananTalepSayisi = visibleTalepler.filter((talep) => talep.durum === 'plana_eklendi').length
@@ -79,6 +117,54 @@ export default function TaleplerPage({
         ))}
       </section>
 
+      <section className="filter-panel">
+        <label>
+          <span>Talep Ara</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(event) => setSearchQuery(event.target.value)}
+            placeholder="Çalışan, yönetici, lokasyon veya eğitim ara"
+          />
+        </label>
+        <label>
+          <span>Yönetici</span>
+          <select value={activeManager} onChange={(event) => setSelectedManager(event.target.value)}>
+            {managerOptions.map((manager) => (
+              <option key={manager} value={manager}>
+                {manager}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Lokasyon</span>
+          <select value={activeLocation} onChange={(event) => setSelectedLocation(event.target.value)}>
+            {locationOptions.map((location) => (
+              <option key={location} value={location}>
+                {location}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Kaynak</span>
+          <select value={selectedSource} onChange={(event) => setSelectedSource(event.target.value)}>
+            <option value="Tümü">Tümü</option>
+            <option value="Yıllık Talep">Yıllık Talep</option>
+            <option value="Bireysel Talep">Bireysel Talep</option>
+          </select>
+        </label>
+        <label>
+          <span>Durum</span>
+          <select value={selectedStatus} onChange={(event) => setSelectedStatus(event.target.value)}>
+            <option value="Tümü">Tümü</option>
+            <option value="beklemede">Beklemede</option>
+            <option value="plana_eklendi">Plana Eklendi</option>
+          </select>
+        </label>
+      </section>
+
       {visibleTalepler.length ? (
         <Card>
           <div className="table-wrapper">
@@ -90,7 +176,9 @@ export default function TaleplerPage({
                   <th>Çalışan Adı</th>
                   <th>Sicil No</th>
                   <th>Kullanıcı Kodu</th>
+                  <th>Lokasyon</th>
                   <th>GMY</th>
+                  <th>Yönetici</th>
                   <th>Talep Edilen Eğitimler</th>
                   <th>Durum</th>
                   <th>İşlemler</th>
@@ -110,7 +198,9 @@ export default function TaleplerPage({
                     </td>
                     <td>{talep.calisanSicil}</td>
                     <td>{talep.calisanKullaniciKodu || '-'}</td>
+                    <td>{talep.calisanLokasyon || '-'}</td>
                     <td>{talep.gmy}</td>
+                    <td>{talep.yoneticiAdi || '-'}</td>
                     <td>
                       <div className="chip-list">
                         {talep.egitimler.map((egitim) => (
@@ -141,8 +231,8 @@ export default function TaleplerPage({
         </Card>
       ) : (
         <EmptyState
-          title="Seçili yıl için talep bulunmuyor"
-          description="Bu yılın taleplerini admin ekranından ekleyin veya Excel ile yükleyin."
+          title="Filtreye uygun talep bulunmuyor"
+          description="Arama ve filtreleri değiştirin ya da bu yıl için yeni talep ekleyin."
         />
       )}
       <TalepDetay open={Boolean(selectedTalep)} onOpenChange={() => setSelectedTalep(null)} talep={selectedTalep} />

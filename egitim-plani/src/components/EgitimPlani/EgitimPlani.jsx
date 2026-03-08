@@ -248,13 +248,18 @@ function TrainingPlanningModal({
           <strong>{new Set(requestRows.map((row) => row.talep.gmy)).size}</strong>
           <small>Benzersiz GMY sayısı</small>
         </div>
+        <div className="detail-card">
+          <span>Lokasyon Dağılımı</span>
+          <strong>{new Set(requestRows.map((row) => row.talep.calisanLokasyon || 'Lokasyon Yok')).size}</strong>
+          <small>Benzersiz lokasyon sayısı</small>
+        </div>
       </div>
 
       <div className="employee-preview-list">
         {requestRows.map((row) => (
           <div key={getSelectionKey(row)} className="employee-preview-item">
             <strong>{row.talep.calisanAdi}</strong>
-            <span>{`${row.talep.calisanSicil} • ${row.talep.calisanKullaniciKodu || '-'}`}</span>
+            <span>{`${row.talep.calisanSicil} • ${row.talep.calisanKullaniciKodu || '-'} • ${row.talep.calisanLokasyon || 'Lokasyon Yok'}`}</span>
           </div>
         ))}
       </div>
@@ -336,7 +341,7 @@ function TrainingPlanningModal({
           </select>
         </label>
         <label>
-          <span>Maliyet</span>
+          <span>Toplam Bütçe</span>
           <input type="number" min="0" value={activeDraft.maliyet} onChange={(event) => updateDraft((current) => ({ ...current, maliyet: Number(event.target.value) }))} />
         </label>
         <label>
@@ -373,6 +378,10 @@ function TrainingPlanningModal({
           <span>Notlar</span>
           <textarea rows={4} value={activeDraft.notlar} onChange={(event) => updateDraft((current) => ({ ...current, notlar: event.target.value }))} />
         </label>
+        <div className="form-grid--full detail-card">
+          <span>Bütçe Notu</span>
+          <small>Girilen bütçe toplu planlamanın toplam bütçesidir. Dashboard ve raporlar bu tutarı seçilen kişi ve filtre sayısına göre paylaştırır.</small>
+        </div>
       </div>
     </Modal>
   )
@@ -539,6 +548,7 @@ export default function EgitimPlaniPage({
         row.talep.calisanAdi,
         row.talep.calisanSicil,
         row.talep.calisanKullaniciKodu,
+        row.talep.calisanLokasyon,
         row.talep.yoneticiAdi,
         row.talep.gmy,
       ].some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
@@ -831,7 +841,7 @@ export default function EgitimPlaniPage({
                       <span>Çalışan Ara</span>
                       <input
                         type="search"
-                        placeholder="Çalışan adı, sicil, kullanıcı kodu"
+                        placeholder="Çalışan adı, sicil, kullanıcı kodu, lokasyon"
                         value={employeeSearch}
                         onChange={(event) => handleEmployeeSearchChange(event.target.value)}
                       />
@@ -891,6 +901,7 @@ export default function EgitimPlaniPage({
                               <th>Çalışan Adı</th>
                               <th>Sicil</th>
                               <th>Kullanıcı Kodu</th>
+                              <th>Lokasyon</th>
                               <th>GMY</th>
                               <th>Yönetici</th>
                               <th>Notlar</th>
@@ -920,6 +931,7 @@ export default function EgitimPlaniPage({
                                   </td>
                                   <td>{row.talep.calisanSicil}</td>
                                   <td>{row.talep.calisanKullaniciKodu || '-'}</td>
+                                  <td>{row.talep.calisanLokasyon || '-'}</td>
                                   <td>{row.talep.gmy}</td>
                                   <td>{row.talep.yoneticiAdi}</td>
                                   <td>{row.talep.notlar || '-'}</td>

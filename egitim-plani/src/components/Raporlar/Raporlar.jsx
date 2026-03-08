@@ -20,7 +20,9 @@ import {
   formatCurrency,
   formatDate,
   formatEgitimLabel,
+  getLokasyonLabel,
   getPlanCostInTry,
+  getPlanOriginalCostShare,
   getPlanProviderLabel,
   getPlanProviderTypeLabel,
   getTalepKaynagiLabel,
@@ -38,24 +40,55 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
   const years = getUniqueYears(planlar, talepler)
   const [selectedYear, setSelectedYear] = useState(years[0] || new Date().getFullYear())
   const [selectedGmy, setSelectedGmy] = useState('Tümü')
+  const [selectedLocation, setSelectedLocation] = useState('Tümü')
+  const [trainingFilter, setTrainingFilter] = useState('')
+  const [coverageStatus, setCoverageStatus] = useState('Tümü')
   const reportRef = useRef(null)
   const activeYear = years.includes(selectedYear) ? selectedYear : years[0] || new Date().getFullYear()
   const activeGmy = selectedGmy === 'Tümü' || gmyList.includes(selectedGmy) ? selectedGmy : 'Tümü'
+  const locationOptions = [
+    'Tümü',
+    ...new Set([...talepler.map((talep) => getLokasyonLabel(talep)), ...planlar.map((plan) => getLokasyonLabel(plan))].filter(Boolean)),
+  ]
+  const activeLocation = selectedLocation === 'Tümü' || locationOptions.includes(selectedLocation) ? selectedLocation : 'Tümü'
   const futureThreshold = addDays(new Date(), 60)
 
   const currentYearPlans = planlar.filter(
-    (plan) => plan.egitimYili === Number(activeYear) && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
+    (plan) =>
+      plan.egitimYili === Number(activeYear) &&
+      (activeGmy === 'Tümü' || plan.gmy === activeGmy) &&
+      (activeLocation === 'Tümü' || getLokasyonLabel(plan) === activeLocation),
   )
   const currentYearRequests = talepler.filter(
-    (talep) => Number(talep.talepYili) === Number(activeYear) && (activeGmy === 'Tümü' || talep.gmy === activeGmy),
+    (talep) =>
+      Number(talep.talepYili) === Number(activeYear) &&
+      (activeGmy === 'Tümü' || talep.gmy === activeGmy) &&
+      (activeLocation === 'Tümü' || getLokasyonLabel(talep) === activeLocation),
   )
 
   const totalPlan = currentYearPlans.length
   const totalBudget = currentYearPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)
   const completedCount = currentYearPlans.filter((plan) => plan.durum === 'tamamlandı').length
   const annualRequestCount = currentYearRequests.filter((talep) => getTalepKaynagiLabel(talep) === 'Yıllık Talep').length
-  const individualRequestCount = currentYearRequests.filter((talep) => getTalepKaynagiLabel(talep) === 'Bireysel Talep').length
   const demandSummary = summarizeDemandCoverage(currentYearRequests, currentYearPlans)
+  const normalizedTrainingFilter = trainingFilter.trim().toLocaleLowerCase('tr-TR')
+  const filteredCoverageRows = demandSummary.annualCoverageRows.filter((item) => {
+    const matchesTraining =
+      !normalizedTrainingFilter ||
+      [item.egitimAdi, item.egitimKodu, item.kategori].some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedTrainingFilter))
+    const matchesStatus =
+      coverageStatus === 'Tümü' ||
+      (coverageStatus === 'Planlananlar' && item.plan > 0) ||
+      (coverageStatus === 'Planlanmayanlar' && item.plan === 0) ||
+      (coverageStatus === 'Kısmi' && item.plan > 0 && item.plan < item.talep) ||
+      (coverageStatus === 'Tam Karşılanan' && item.plan >= item.talep)
+
+    return matchesTraining && matchesStatus
+  })
+  const filteredExternalPlans = demandSummary.externalPlanRows.filter((item) =>
+    !normalizedTrainingFilter ||
+    [item.egitimAdi, item.egitimKodu, item.kategori].some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedTrainingFilter)),
+  )
   const completionRate = totalPlan ? (completedCount / totalPlan) * 100 : 0
 
   const summaryCards = [
@@ -65,19 +98,19 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
       meta: `${demandSummary.annualDemandCount} eğitim ihtiyacı`,
     },
     {
-      label: 'Karşılanan Yıllık Talep',
-      current: formatPercent(demandSummary.annualCoverageRate),
-      meta: `${demandSummary.annualCoveredDemandCount}/${demandSummary.annualDemandCount} eğitim talebi planlandı`,
+      label: 'Filtreli Başlık',
+      current: filteredCoverageRows.length,
+      meta: `${demandSummary.annualRequestTitleCount} başlık içinde`,
     },
     {
-      label: 'Bireysel Talep',
-      current: individualRequestCount,
-      meta: `${demandSummary.individualPlannedCount} bireysel plan üretildi`,
+      label: 'Planlanan Başlık',
+      current: filteredCoverageRows.filter((item) => item.plan > 0).length,
+      meta: `${filteredCoverageRows.length ? Math.round((filteredCoverageRows.filter((item) => item.plan > 0).length / filteredCoverageRows.length) * 100) : 0}% planlı`,
     },
     {
-      label: 'Yıllık Talep Dışı Plan',
-      current: demandSummary.externalPlannedCount,
-      meta: `${demandSummary.externalPlannedTitleCount} eğitim başlığı yıllık taleplerde yok`,
+      label: 'Planlanmayan Başlık',
+      current: filteredCoverageRows.filter((item) => item.plan === 0).length,
+      meta: `${filteredExternalPlans.length} yıllık talep dışı başlık ayrıca izlendi`,
     },
   ]
 
@@ -106,8 +139,8 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
     })
     .filter((item) => item.talep || item.plan)
 
-  const demandCoverage = demandSummary.annualCoverageRows.slice(0, 10)
-  const externalPlans = demandSummary.externalPlanRows.slice(0, 10)
+  const demandCoverage = filteredCoverageRows.slice(0, 10)
+  const externalPlans = filteredExternalPlans.slice(0, 10)
 
   const upcomingPlans = currentYearPlans
     .filter((plan) => plan.egitimTarihi && parseISO(plan.egitimTarihi) <= futureThreshold)
@@ -167,20 +200,27 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
       }
 
       accumulator[currency].plan += 1
-      accumulator[currency].toplam += Number(plan.maliyet || 0)
+      accumulator[currency].toplam += getPlanOriginalCostShare(plan)
       accumulator[currency].toplamTl += getPlanCostInTry(plan, kurBilgileri)
       return accumulator
     }, {}),
   ).sort((left, right) => right.toplamTl - left.toplamTl)
 
+  const exportPlans = currentYearPlans.filter(
+    (plan) =>
+      !normalizedTrainingFilter ||
+      [plan.egitimAdi, plan.egitimKodu, plan.kategori].some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedTrainingFilter)),
+  )
+
   function handleExport() {
     downloadCsv(
       `egitim-plani-${activeYear}.csv`,
-      currentYearPlans.map((plan) => ({
+      exportPlans.map((plan) => ({
         'Talep Yılı': plan.egitimYili,
         'Çalışan Adı': plan.calisanAdi,
         Sicil: plan.calisanSicil,
         'Kullanıcı Kodu': plan.calisanKullaniciKodu,
+        Lokasyon: plan.calisanLokasyon || '-',
         GMY: plan.gmy,
         'Eğitim Kodu': plan.egitimKodu,
         Eğitim: plan.egitimAdi,
@@ -196,7 +236,9 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
         Durum: plan.durum,
         'Para Birimi': plan.maliyetParaBirimi || 'TRY',
         Kur: plan.dovizKuru || 1,
-        Maliyet: plan.maliyet,
+        'Toplam Bütçe': plan.toplamMaliyet ?? plan.maliyet,
+        'Bütçe Paylaşım Adedi': plan.butcePaylasimAdedi || 1,
+        'Dağıtılmış Bütçe': getPlanOriginalCostShare(plan),
         'TL Maliyet': getPlanCostInTry(plan, kurBilgileri),
       })),
     )
@@ -241,6 +283,16 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
               ))}
             </select>
           </label>
+          <label>
+            <span>Lokasyon</span>
+            <select value={activeLocation} onChange={(event) => setSelectedLocation(event.target.value)}>
+              {locationOptions.map((location) => (
+                <option key={location} value={location}>
+                  {location}
+                </option>
+              ))}
+            </select>
+          </label>
           <button className="button" onClick={handleExport}>
             Excel'e Aktar
           </button>
@@ -249,6 +301,28 @@ export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
             PDF İndir
           </button>
         </div>
+      </section>
+
+      <section className="filter-panel">
+        <label>
+          <span>Eğitim Adı / Kodu</span>
+          <input
+            type="search"
+            value={trainingFilter}
+            onChange={(event) => setTrainingFilter(event.target.value)}
+            placeholder="Eğitim adı veya kodu ile filtrele"
+          />
+        </label>
+        <label>
+          <span>Planlama Durumu</span>
+          <select value={coverageStatus} onChange={(event) => setCoverageStatus(event.target.value)}>
+            <option value="Tümü">Tümü</option>
+            <option value="Planlananlar">Planlananlar</option>
+            <option value="Planlanmayanlar">Planlanmayanlar</option>
+            <option value="Kısmi">Kısmi</option>
+            <option value="Tam Karşılanan">Tam Karşılanan</option>
+          </select>
+        </label>
       </section>
 
       <section className="report-highlight-grid">

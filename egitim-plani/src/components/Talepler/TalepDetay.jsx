@@ -24,7 +24,7 @@ export default function TalepDetay({ open, onOpenChange, talep }) {
         <div className="detail-card">
           <span>Organizasyon</span>
           <strong>{talep.gmy}</strong>
-          <small>Yönetici talebi</small>
+          <small>{talep.calisanLokasyon || 'Lokasyon bilgisi yok'}</small>
         </div>
         <div className="detail-card">
           <span>Yönetici</span>

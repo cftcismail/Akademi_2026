@@ -28,6 +28,12 @@ function getCurrentYear() {
   return new Date().getFullYear()
 }
 
+function yieldToMainThread() {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, 0)
+  })
+}
+
 function getPlanDateFields(egitimTarihi) {
   const planDate = new Date(egitimTarihi)
 
@@ -88,6 +94,7 @@ function normalizeTalep(talep) {
     yoneticiAdi: talep.yoneticiAdi || '',
     yoneticiEmail: talep.yoneticiEmail || '',
     gmy: talep.gmy || '',
+    calisanLokasyon: talep.calisanLokasyon || '',
     calisanAdi: talep.calisanAdi || '',
     calisanSicil: talep.calisanSicil || '',
     calisanKullaniciKodu: talep.calisanKullaniciKodu || '',
@@ -116,6 +123,7 @@ function normalizePlan(plan) {
     ...plan,
     calisanKullaniciKodu: plan.calisanKullaniciKodu || '',
     gmy: plan.gmy || '',
+    calisanLokasyon: plan.calisanLokasyon || '',
     egitimKodu: `${plan.egitimKodu || ''}`.trim(),
     kategori: plan.kategori || 'Teknik',
     icEgitim,
@@ -123,6 +131,9 @@ function normalizePlan(plan) {
     kurum: icEgitim ? '' : kurum || legacyProvider,
     notlar: plan.notlar || '',
     maliyet: Number(plan.maliyet || 0),
+    toplamMaliyet: Number((plan.toplamMaliyet ?? plan.maliyet) || 0),
+    butcePaylasimAdedi: Math.max(1, Number(plan.butcePaylasimAdedi || 1)),
+    planGrubuId: plan.planGrubuId || plan.id,
     maliyetParaBirimi: `${plan.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase(),
     dovizKuru: Number(plan.dovizKuru || 1),
   }
@@ -298,6 +309,7 @@ function isEmptyTalepPayload(payload) {
     payload.yoneticiAdi,
     payload.yoneticiEmail,
     payload.gmy,
+    payload.calisanLokasyon,
     payload.calisanAdi,
     payload.calisanSicil,
     payload.calisanKullaniciKodu,
@@ -316,6 +328,7 @@ function getIssueDetails(payload, reason) {
     sourceLabel: getPayloadSourceLabel(payload),
     talepYili: Number(payload.talepYili || getCurrentYear()),
     calisanAdi: `${payload.calisanAdi || ''}`.trim(),
+    calisanLokasyon: `${payload.calisanLokasyon || ''}`.trim(),
     calisanSicil: `${payload.calisanSicil || ''}`.trim(),
     calisanKullaniciKodu: `${payload.calisanKullaniciKodu || ''}`.trim(),
     egitimler: (payload.egitimler || [])
@@ -371,7 +384,13 @@ function createTalepRecord(payload) {
   }
 }
 
-function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlanKeys }) {
+function countPlanEntries({ talep, selectedEgitimIds, existingPlanKeys }) {
+  return talep.egitimler
+    .filter((egitim) => selectedEgitimIds.includes(egitim.egitimId))
+    .filter((egitim) => !existingPlanKeys.has(getPlanKey(talep.id, egitim.egitimAdi, egitim.egitimKodu))).length
+}
+
+function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlanKeys, planGrubuId, butcePaylasimAdedi }) {
   if (!selectedEgitimIds.length) {
     throw new Error('En az bir eğitim seçilmelidir.')
   }
@@ -392,11 +411,13 @@ function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlan
     .filter((egitim) => !existingPlanKeys.has(getPlanKey(talep.id, egitim.egitimAdi, egitim.egitimKodu)))
     .map((egitim) => ({
       id: uuidv4(),
+      planGrubuId: planGrubuId || uuidv4(),
       talepId: talep.id,
       calisanAdi: talep.calisanAdi,
       calisanSicil: talep.calisanSicil,
       calisanKullaniciKodu: talep.calisanKullaniciKodu,
       gmy: talep.gmy,
+      calisanLokasyon: talep.calisanLokasyon || '',
       egitimKodu: `${egitim.egitimKodu || ''}`.trim(),
       egitimAdi: egitim.egitimAdi,
       kategori: egitim.kategori,
@@ -409,6 +430,8 @@ function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlan
       egitimci: ortakAlanlar.icEgitim ? ortakAlanlar.egitimci : '',
       kurum: ortakAlanlar.icEgitim ? '' : ortakAlanlar.kurum,
       maliyet: Number(ortakAlanlar.maliyet || 0),
+      toplamMaliyet: Number(ortakAlanlar.maliyet || 0),
+      butcePaylasimAdedi: Math.max(1, Number(butcePaylasimAdedi || selectedEgitimIds.length || 1)),
       maliyetParaBirimi: `${ortakAlanlar.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase(),
       dovizKuru: Number(ortakAlanlar.dovizKuru || 1),
       durum: ortakAlanlar.durum,
@@ -1123,33 +1146,58 @@ export default function useEgitimData() {
     }
   }
 
-  function importTalepler(payloads) {
+  async function importTalepler(payloads, options = {}) {
+    const batchSize = Math.max(50, Number(options.batchSize || 250))
+    const maxIssues = Math.max(0, Number(options.maxIssues || 250))
+    const onProgress = typeof options.onProgress === 'function' ? options.onProgress : null
     const existingKeys = new Set(talepler.map((talep) => buildTalepDuplicateKey(talep)))
     const importedKeys = new Set()
     const records = []
     const issues = []
+    let hiddenIssueCount = 0
 
-    payloads.forEach((payload) => {
-      try {
-        const record = createTalepRecord(payload)
+    for (let startIndex = 0; startIndex < payloads.length; startIndex += batchSize) {
+      const batch = payloads.slice(startIndex, startIndex + batchSize)
 
-        if (!record) {
-          return
+      batch.forEach((payload) => {
+        try {
+          const record = createTalepRecord(payload)
+
+          if (!record) {
+            return
+          }
+
+          if (existingKeys.has(record.duplicateKey) || importedKeys.has(record.duplicateKey)) {
+            if (issues.length < maxIssues) {
+              issues.push(
+                getIssueDetails(payload, 'Mükerrer satır bulundu. Aynı kayıt daha önce sisteme eklenmiş veya dosyada tekrar ediyor.'),
+              )
+            } else {
+              hiddenIssueCount += 1
+            }
+            return
+          }
+
+          importedKeys.add(record.duplicateKey)
+          records.push(record)
+        } catch (error) {
+          if (issues.length < maxIssues) {
+            issues.push(getIssueDetails(payload, error.message || 'Satır işlenemedi.'))
+          } else {
+            hiddenIssueCount += 1
+          }
         }
+      })
 
-        if (existingKeys.has(record.duplicateKey) || importedKeys.has(record.duplicateKey)) {
-          issues.push(
-            getIssueDetails(payload, 'Mükerrer satır bulundu. Aynı kayıt daha önce sisteme eklenmiş veya dosyada tekrar ediyor.'),
-          )
-          return
-        }
+      onProgress?.({
+        processed: Math.min(startIndex + batch.length, payloads.length),
+        total: payloads.length,
+      })
 
-        importedKeys.add(record.duplicateKey)
-        records.push(record)
-      } catch (error) {
-        issues.push(getIssueDetails(payload, error.message || 'Satır işlenemedi.'))
+      if (startIndex + batch.length < payloads.length) {
+        await yieldToMainThread()
       }
-    })
+    }
 
     if (!records.length && !issues.length) {
       throw new Error('Excel dosyasında içeri aktarılacak geçerli satır bulunamadı.')
@@ -1168,6 +1216,8 @@ export default function useEgitimData() {
     return {
       importedCount: records.length,
       issues,
+      hiddenIssueCount,
+      totalIssueCount: issues.length + hiddenIssueCount,
     }
   }
 
@@ -1179,11 +1229,19 @@ export default function useEgitimData() {
     }
 
     const existingPlanKeys = new Set(planlar.map((plan) => getPlanKey(plan.talepId, plan.egitimAdi, plan.egitimKodu)))
+    const planGrubuId = uuidv4()
+    const butcePaylasimAdedi = countPlanEntries({
+      talep,
+      selectedEgitimIds,
+      existingPlanKeys,
+    })
     const nextPlanlar = buildPlanEntries({
       talep,
       selectedEgitimIds,
       ortakAlanlar,
       existingPlanKeys,
+      planGrubuId,
+      butcePaylasimAdedi,
     })
 
     if (!nextPlanlar.length) {
@@ -1213,6 +1271,20 @@ export default function useEgitimData() {
     const existingPlanKeys = new Set(planlar.map((plan) => getPlanKey(plan.talepId, plan.egitimAdi, plan.egitimKodu)))
     const talepIdsToUpdate = new Set()
     const nextPlanlar = []
+    const planGrubuId = uuidv4()
+    const butcePaylasimAdedi = selections.reduce((total, selection) => {
+      const talep = talepler.find((item) => item.id === selection.talepId)
+
+      if (!talep) {
+        return total
+      }
+
+      return total + countPlanEntries({
+        talep,
+        selectedEgitimIds: selection.selectedEgitimIds,
+        existingPlanKeys,
+      })
+    }, 0)
 
     selections.forEach((selection) => {
       const talep = talepler.find((item) => item.id === selection.talepId)
@@ -1226,6 +1298,8 @@ export default function useEgitimData() {
         selectedEgitimIds: selection.selectedEgitimIds,
         ortakAlanlar,
         existingPlanKeys,
+        planGrubuId,
+        butcePaylasimAdedi,
       })
 
       createdPlans.forEach((plan) => {
@@ -1271,10 +1345,13 @@ export default function useEgitimData() {
           ...updates,
           icEgitim,
           egitimci: icEgitim
-            ? `${updates.egitimci ?? (plan.egitimci || 'İç Eğitim')}`.trim() || 'İç Eğitim'
+            ? (`${updates.egitimci ?? (plan.egitimci || 'İç Eğitim')}`.trim() || 'İç Eğitim')
             : '',
           kurum: icEgitim ? '' : `${updates.kurum ?? (plan.kurum || plan.egitimci || '')}`.trim(),
           maliyet: Number((updates.maliyet ?? plan.maliyet) || 0),
+          toplamMaliyet: Number((updates.toplamMaliyet ?? updates.maliyet ?? plan.toplamMaliyet ?? plan.maliyet) || 0),
+          butcePaylasimAdedi: Math.max(1, Number((updates.butcePaylasimAdedi ?? plan.butcePaylasimAdedi) || 1)),
+          planGrubuId: updates.planGrubuId ?? plan.planGrubuId ?? plan.id,
           maliyetParaBirimi: `${updates.maliyetParaBirimi || plan.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase(),
           dovizKuru: Number((updates.dovizKuru ?? plan.dovizKuru) || 1),
         }

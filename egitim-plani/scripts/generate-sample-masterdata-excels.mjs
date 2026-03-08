@@ -15,6 +15,61 @@ function writeWorkbook(fileName, rows, sheetName) {
 }
 
 writeWorkbook(
+  'ornek-talep-aktarim.xlsx',
+  [
+    {
+      'Yönetici Adı': 'Zeynep Arslan',
+      'Yönetici E-posta': 'zeynep.arslan@firma.com',
+      GMY: 'Operasyon',
+      Lokasyon: 'Gebze',
+      'Çalışan Adı': 'Murat Kaya',
+      'Çalışan Sicil No': '100245',
+      'Çalışan Kullanıcı Kodu': 'mkaya',
+      Notlar: 'Yıllık gelişim planı kapsamında öncelikli eğitimler.',
+      'Eğitim 1 Kodu': 'OPR-101',
+      'Eğitim 1 Adı': 'Problem Çözme Teknikleri',
+      'Eğitim 1 Kategori': 'Operasyonel Mükemmellik',
+      'Eğitim 2 Kodu': 'OPR-204',
+      'Eğitim 2 Adı': 'Kök Neden Analizi',
+      'Eğitim 2 Kategori': 'Kalite',
+    },
+    {
+      'Yönetici Adı': 'Ece Şahin',
+      'Yönetici E-posta': 'ece.sahin@firma.com',
+      GMY: 'Bilgi Teknolojileri',
+      Lokasyon: 'Maslak',
+      'Çalışan Adı': 'Can Tunç',
+      'Çalışan Sicil No': '100312',
+      'Çalışan Kullanıcı Kodu': 'ctunc',
+      Notlar: 'Power BI ve veri modelleme odağıyla talep edildi.',
+      'Eğitim 1 Kodu': 'BT-330',
+      'Eğitim 1 Adı': 'Power BI ile Yönetim Raporlama',
+      'Eğitim 1 Kategori': 'Veri ve Raporlama',
+      'Eğitim 2 Kodu': 'BT-412',
+      'Eğitim 2 Adı': 'SQL Performans Optimizasyonu',
+      'Eğitim 2 Kategori': 'Yazılım',
+    },
+    {
+      'Yönetici Adı': 'Burak Öztürk',
+      'Yönetici E-posta': 'burak.ozturk@firma.com',
+      GMY: 'İnsan Kaynakları',
+      Lokasyon: 'Ankara',
+      'Çalışan Adı': 'Selin Acar',
+      'Çalışan Sicil No': '100487',
+      'Çalışan Kullanıcı Kodu': 'sacar',
+      Notlar: 'Yönetici yedeği programı için seçildi.',
+      'Eğitim 1 Kodu': 'IK-118',
+      'Eğitim 1 Adı': 'Koçvari Liderlik',
+      'Eğitim 1 Kategori': 'Liderlik',
+      'Eğitim 2 Kodu': 'IK-210',
+      'Eğitim 2 Adı': 'Etkili Geri Bildirim',
+      'Eğitim 2 Kategori': 'İletişim',
+    },
+  ],
+  'Talepler',
+)
+
+writeWorkbook(
   'ornek-kurum-listesi.xlsx',
   [
     {

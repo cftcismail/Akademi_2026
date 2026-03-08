@@ -144,7 +144,7 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
         <div className="detail-card">
           <span>GMY</span>
           <strong>{talep.gmy}</strong>
-          <small>Talep üzerinden planlanacak</small>
+          <small>{talep.calisanLokasyon || 'Lokasyon bilgisi yok'}</small>
         </div>
       </div>
 
@@ -251,7 +251,7 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
           </select>
         </label>
         <label>
-          <span>Maliyet</span>
+          <span>Toplam Bütçe</span>
           <input type="number" min="0" value={activeForm.maliyet} onChange={(event) => updateForm((current) => ({ ...current, maliyet: Number(event.target.value) }))} />
         </label>
         <label>
@@ -291,6 +291,10 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit, egi
           <span>Notlar</span>
           <textarea value={activeForm.notlar} onChange={(event) => updateForm((current) => ({ ...current, notlar: event.target.value }))} rows={3} />
         </label>
+        <div className="form-grid--full detail-card">
+          <span>Bütçe Notu</span>
+          <small>Girilen bütçe bu planlama aksiyonunun toplam bütçesidir. Raporlarda kişi ve filtre dağılımına göre paylaştırılır.</small>
+        </div>
       </div>
     </Modal>
   )

@@ -59,6 +59,7 @@ const CREATE_TABLE_STATEMENTS = [
       yonetici_adi TEXT NOT NULL DEFAULT '',
       yonetici_email TEXT NOT NULL DEFAULT '',
       gmy TEXT NOT NULL DEFAULT '',
+      calisan_lokasyon TEXT NOT NULL DEFAULT '',
       calisan_adi TEXT NOT NULL DEFAULT '',
       calisan_sicil TEXT NOT NULL DEFAULT '',
       calisan_kullanici_kodu TEXT NOT NULL DEFAULT '',
@@ -70,6 +71,10 @@ const CREATE_TABLE_STATEMENTS = [
   `
     ALTER TABLE requests
     ADD COLUMN IF NOT EXISTS talep_kaynagi TEXT NOT NULL DEFAULT 'Yıllık Talep'
+  `,
+  `
+    ALTER TABLE requests
+    ADD COLUMN IF NOT EXISTS calisan_lokasyon TEXT NOT NULL DEFAULT ''
   `,
   `
     CREATE TABLE IF NOT EXISTS request_trainings (
@@ -88,6 +93,7 @@ const CREATE_TABLE_STATEMENTS = [
       calisan_adi TEXT NOT NULL DEFAULT '',
       calisan_sicil TEXT NOT NULL DEFAULT '',
       calisan_kullanici_kodu TEXT NOT NULL DEFAULT '',
+      calisan_lokasyon TEXT NOT NULL DEFAULT '',
       gmy TEXT NOT NULL DEFAULT '',
       egitim_kodu TEXT NOT NULL DEFAULT '',
       egitim_adi TEXT NOT NULL DEFAULT '',
@@ -102,12 +108,31 @@ const CREATE_TABLE_STATEMENTS = [
       egitimci TEXT NOT NULL DEFAULT '',
       kurum TEXT NOT NULL DEFAULT '',
       maliyet NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      toplam_maliyet NUMERIC(14, 2) NOT NULL DEFAULT 0,
+      butce_paylasim_adedi INTEGER NOT NULL DEFAULT 1,
+      plan_grubu_id TEXT NOT NULL DEFAULT '',
       maliyet_para_birimi TEXT NOT NULL DEFAULT 'TRY',
       doviz_kuru NUMERIC(14, 4) NOT NULL DEFAULT 1,
       durum TEXT NOT NULL DEFAULT 'planlandı',
       notlar TEXT NOT NULL DEFAULT '',
       position INTEGER NOT NULL
     )
+  `,
+  `
+    ALTER TABLE plans
+    ADD COLUMN IF NOT EXISTS calisan_lokasyon TEXT NOT NULL DEFAULT ''
+  `,
+  `
+    ALTER TABLE plans
+    ADD COLUMN IF NOT EXISTS toplam_maliyet NUMERIC(14, 2) NOT NULL DEFAULT 0
+  `,
+  `
+    ALTER TABLE plans
+    ADD COLUMN IF NOT EXISTS butce_paylasim_adedi INTEGER NOT NULL DEFAULT 1
+  `,
+  `
+    ALTER TABLE plans
+    ADD COLUMN IF NOT EXISTS plan_grubu_id TEXT NOT NULL DEFAULT ''
   `,
 ]
 
@@ -239,6 +264,7 @@ async function persistRelationalState(client, nextState) {
           yonetici_adi,
           yonetici_email,
           gmy,
+          calisan_lokasyon,
           calisan_adi,
           calisan_sicil,
           calisan_kullanici_kodu,
@@ -246,7 +272,7 @@ async function persistRelationalState(client, nextState) {
           durum,
           position
         )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
       `,
       [
         talep.id,
@@ -255,6 +281,7 @@ async function persistRelationalState(client, nextState) {
         talep.yoneticiAdi || '',
         talep.yoneticiEmail || '',
         talep.gmy || '',
+        talep.calisanLokasyon || '',
         talep.calisanAdi || '',
         talep.calisanSicil || '',
         talep.calisanKullaniciKodu || '',
@@ -291,6 +318,7 @@ async function persistRelationalState(client, nextState) {
           calisan_adi,
           calisan_sicil,
           calisan_kullanici_kodu,
+          calisan_lokasyon,
           gmy,
           egitim_kodu,
           egitim_adi,
@@ -305,6 +333,9 @@ async function persistRelationalState(client, nextState) {
           egitimci,
           kurum,
           maliyet,
+          toplam_maliyet,
+          butce_paylasim_adedi,
+          plan_grubu_id,
           maliyet_para_birimi,
           doviz_kuru,
           durum,
@@ -313,7 +344,7 @@ async function persistRelationalState(client, nextState) {
         )
         VALUES (
           $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-          $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24
+          $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
         )
       `,
       [
@@ -322,6 +353,7 @@ async function persistRelationalState(client, nextState) {
         plan.calisanAdi || '',
         plan.calisanSicil || '',
         plan.calisanKullaniciKodu || '',
+        plan.calisanLokasyon || '',
         plan.gmy || '',
         plan.egitimKodu || '',
         plan.egitimAdi || '',
@@ -336,6 +368,9 @@ async function persistRelationalState(client, nextState) {
         plan.egitimci || '',
         plan.kurum || '',
         Number(plan.maliyet || 0),
+        Number((plan.toplamMaliyet ?? plan.maliyet) || 0),
+        Math.max(1, Number(plan.butcePaylasimAdedi || 1)),
+        plan.planGrubuId || plan.id,
         plan.maliyetParaBirimi || 'TRY',
         Number(plan.dovizKuru || 1),
         plan.durum || 'planlandı',
@@ -359,7 +394,7 @@ async function readRelationalState(client) {
     client.query('SELECT id, kod, ad, kategori, sure, aciklama FROM catalog ORDER BY position ASC'),
     client.query(
       `
-        SELECT id, talep_yili, yonetici_adi, yonetici_email, gmy, calisan_adi,
+         SELECT id, talep_yili, yonetici_adi, yonetici_email, gmy, calisan_lokasyon, calisan_adi,
            talep_kaynagi, calisan_sicil, calisan_kullanici_kodu, notlar, durum
         FROM requests
         ORDER BY position ASC
@@ -375,9 +410,9 @@ async function readRelationalState(client) {
     client.query(
       `
         SELECT id, talep_id, calisan_adi, calisan_sicil, calisan_kullanici_kodu, gmy,
-               egitim_kodu, egitim_adi, kategori, egitim_turu, planlanma_tarihi,
+               calisan_lokasyon, egitim_kodu, egitim_adi, kategori, egitim_turu, planlanma_tarihi,
                egitim_tarihi, egitim_ayi, egitim_yili, sure, ic_egitim, egitimci,
-               kurum, maliyet, maliyet_para_birimi, doviz_kuru, durum, notlar
+               kurum, maliyet, toplam_maliyet, butce_paylasim_adedi, plan_grubu_id, maliyet_para_birimi, doviz_kuru, durum, notlar
         FROM plans
         ORDER BY position ASC
       `,
@@ -444,6 +479,7 @@ async function readRelationalState(client) {
     yoneticiAdi: row.yonetici_adi,
     yoneticiEmail: row.yonetici_email,
     gmy: row.gmy,
+    calisanLokasyon: row.calisan_lokasyon || '',
     calisanAdi: row.calisan_adi,
     calisanSicil: row.calisan_sicil,
     calisanKullaniciKodu: row.calisan_kullanici_kodu,
@@ -458,6 +494,7 @@ async function readRelationalState(client) {
     calisanAdi: row.calisan_adi,
     calisanSicil: row.calisan_sicil,
     calisanKullaniciKodu: row.calisan_kullanici_kodu,
+    calisanLokasyon: row.calisan_lokasyon || '',
     gmy: row.gmy,
     egitimKodu: row.egitim_kodu,
     egitimAdi: row.egitim_adi,
@@ -472,6 +509,9 @@ async function readRelationalState(client) {
     egitimci: row.egitimci,
     kurum: row.kurum,
     maliyet: Number(row.maliyet || 0),
+    toplamMaliyet: Number(row.toplam_maliyet || row.maliyet || 0),
+    butcePaylasimAdedi: Math.max(1, Number(row.butce_paylasim_adedi || 1)),
+    planGrubuId: row.plan_grubu_id || row.id,
     maliyetParaBirimi: row.maliyet_para_birimi,
     dovizKuru: Number(row.doviz_kuru || 1),
     durum: row.durum,

@@ -33,6 +33,11 @@ export default function CalisanDetay({ talepler, planlar }) {
           <small>Organizasyon kırılımı</small>
         </Card>
         <Card className="detail-card detail-card--hero">
+          <span>Lokasyon</span>
+          <strong>{profile.calisanLokasyon || 'Lokasyon Yok'}</strong>
+          <small>Çalışanın bağlı olduğu lokasyon</small>
+        </Card>
+        <Card className="detail-card detail-card--hero">
           <span>Talep Sayısı</span>
           <strong>{calisanTalepleri.length}</strong>
           <small>Toplam açılmış talep kaydı</small>
