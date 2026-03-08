@@ -1,17 +1,34 @@
 const COLUMN_ALIASES = {
   yoneticiadi: 'yoneticiAdi',
+  yoneticiad: 'yoneticiAdi',
+  yneticiadi: 'yoneticiAdi',
+  yneticiad: 'yoneticiAdi',
   yoneticieposta: 'yoneticiEmail',
+  yoneticiep: 'yoneticiEmail',
   yoneticiemail: 'yoneticiEmail',
+  yneticieposta: 'yoneticiEmail',
+  yneticiemail: 'yoneticiEmail',
   gmy: 'gmy',
   lokasyon: 'calisanLokasyon',
   calisanlokasyon: 'calisanLokasyon',
+  alanlokasyon: 'calisanLokasyon',
   lokasyonbilgisi: 'calisanLokasyon',
   calisanadi: 'calisanAdi',
+  calisanad: 'calisanAdi',
+  alanadi: 'calisanAdi',
+  alanad: 'calisanAdi',
   calisankullanicikodu: 'calisanKullaniciKodu',
+  calisankul: 'calisanKullaniciKodu',
+  alankullanicikodu: 'calisanKullaniciKodu',
+  alankullanickodu: 'calisanKullaniciKodu',
+  alankullanckodu: 'calisanKullaniciKodu',
   calisankod: 'calisanKullaniciKodu',
   kullanicikodu: 'calisanKullaniciKodu',
   calisansicil: 'calisanSicil',
   calisansicilno: 'calisanSicil',
+  calisansic: 'calisanSicil',
+  alansicil: 'calisanSicil',
+  alansicilno: 'calisanSicil',
   notlar: 'notlar',
 }
 
@@ -50,7 +67,7 @@ export function mapExcelRowsToTalepler(rows) {
         return
       }
 
-      const egitimMatch = key.match(/^egitim([1-4])(adi|kategori|kodu)$/)
+      const egitimMatch = key.match(/^(?:egitim|eitim|gitim)([1-4])(adi|ad|kategori|kat|kodu|kod)$/)
 
       if (!egitimMatch) {
         return
@@ -64,15 +81,15 @@ export function mapExcelRowsToTalepler(rows) {
         kategori: 'Teknik',
       }
 
-      if (egitimField === 'kodu') {
+      if (egitimField === 'kodu' || egitimField === 'kod') {
         nextEgitim.egitimKodu = `${value || ''}`.trim()
       }
 
-      if (egitimField === 'adi') {
+      if (egitimField === 'adi' || egitimField === 'ad') {
         nextEgitim.egitimAdi = `${value || ''}`.trim()
       }
 
-      if (egitimField === 'kategori') {
+      if (egitimField === 'kategori' || egitimField === 'kat') {
         nextEgitim.kategori = `${value || ''}`.trim() || 'Teknik'
       }
 
