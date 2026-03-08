@@ -1,8 +1,6 @@
 import {
   BarChart3,
   CalendarRange,
-  ChevronLeft,
-  ChevronRight,
   ClipboardList,
   GraduationCap,
 } from 'lucide-react'
@@ -15,20 +13,18 @@ const navigationItems = [
   { to: '/raporlar', label: 'Raporlar', icon: GraduationCap },
 ]
 
-export default function Sidebar({ sidebarOpen }) {
+export default function Sidebar() {
   return (
-    <aside className="sidebar">
+    <nav className="sidebar sidebar--top">
       <div className="sidebar-brand">
         <div className="sidebar-brand__icon">EP</div>
-        {sidebarOpen ? (
-          <div>
-            <strong>Eğitim Planı</strong>
-            <span>Yönetim Sistemi</span>
-          </div>
-        ) : null}
+        <div>
+          <strong>Eğitim Planı</strong>
+          <span>Yönetim Sistemi</span>
+        </div>
       </div>
 
-      <nav className="sidebar-nav">
+      <div className="sidebar-nav sidebar-nav--top">
         {navigationItems.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
@@ -36,15 +32,10 @@ export default function Sidebar({ sidebarOpen }) {
             className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`.trim()}
           >
             <Icon size={18} />
-            {sidebarOpen ? <span>{label}</span> : null}
+            <span>{label}</span>
           </NavLink>
         ))}
-      </nav>
-
-      <div className="sidebar-footer">
-        {sidebarOpen ? <span>Kurumsal görünüm</span> : null}
-        {sidebarOpen ? <ChevronLeft size={16} /> : <ChevronRight size={16} />}
       </div>
-    </aside>
+    </nav>
   )
 }

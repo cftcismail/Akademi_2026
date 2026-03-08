@@ -30,6 +30,7 @@ export default function Raporlar({ planlar }) {
         accumulator[plan.calisanSicil] = {
           calisanAdi: plan.calisanAdi,
           calisanSicil: plan.calisanSicil,
+          calisanKullaniciKodu: plan.calisanKullaniciKodu,
           count: 0,
         }
       }
@@ -52,8 +53,8 @@ export default function Raporlar({ planlar }) {
       currentYearPlans.map((plan) => ({
         'Çalışan Adı': plan.calisanAdi,
         Sicil: plan.calisanSicil,
+        'Kullanıcı Kodu': plan.calisanKullaniciKodu,
         GMY: plan.gmy,
-        Birim: plan.birim,
         Eğitim: plan.egitimAdi,
         Kategori: plan.kategori,
         'Eğitim Türü': plan.egitimTuru,
@@ -151,6 +152,7 @@ export default function Raporlar({ planlar }) {
                 <tr>
                   <th>Çalışan</th>
                   <th>Sicil</th>
+                  <th>Kullanıcı Kodu</th>
                   <th>Eğitim Sayısı</th>
                 </tr>
               </thead>
@@ -159,6 +161,7 @@ export default function Raporlar({ planlar }) {
                   <tr key={employee.calisanSicil}>
                     <td>{employee.calisanAdi}</td>
                     <td>{employee.calisanSicil}</td>
+                    <td>{employee.calisanKullaniciKodu || '-'}</td>
                     <td>{employee.count}</td>
                   </tr>
                 ))}

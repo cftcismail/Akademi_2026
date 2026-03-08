@@ -1,48 +1,153 @@
-import { useDeferredValue, useEffect, useState } from 'react'
+import { useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import { DURUM_LISTESI, EGITIM_TURLERI } from '../../data/constants'
-import { formatDate, getEmployeeRoute, getMonthLabel, getUniqueYears, includesText } from '../../utils/helpers'
+import { formatDate, getEmployeeRoute } from '../../utils/helpers'
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
+import EmptyState from '../ui/EmptyState'
 import Modal from '../ui/Modal'
-import PlanFiltrele from './PlanFiltrele'
 
-function EditPlanModal({ plan, open, onOpenChange, onSave }) {
-  const [draft, setDraft] = useState(plan)
+function createPlanningDraft() {
+  return {
+    egitimTuru: EGITIM_TURLERI[0],
+    egitimTarihi: new Date().toISOString().slice(0, 10),
+    sure: '1 gün',
+    egitimci: 'İç Eğitim',
+    maliyet: 0,
+    durum: DURUM_LISTESI[0],
+    notlar: '',
+  }
+}
 
-  useEffect(() => {
-    setDraft(plan)
-  }, [plan])
+function getSelectionKey(row) {
+  return `${row.talep.id}::${row.egitim.egitimId}`
+}
 
-  if (!plan || !draft) {
+function sortTrainingGroups(left, right) {
+  const leftHasPending = left.pendingCount > 0
+  const rightHasPending = right.pendingCount > 0
+
+  if (leftHasPending !== rightHasPending) {
+    return leftHasPending ? -1 : 1
+  }
+
+  const categoryCompare = left.kategori.localeCompare(right.kategori, 'tr')
+
+  if (categoryCompare !== 0) {
+    return categoryCompare
+  }
+
+  if (right.pendingCount !== left.pendingCount) {
+    return right.pendingCount - left.pendingCount
+  }
+
+  if (right.talepler.length !== left.talepler.length) {
+    return right.talepler.length - left.talepler.length
+  }
+
+  return left.egitimAdi.localeCompare(right.egitimAdi, 'tr')
+}
+
+function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, onSaveBatch }) {
+  const [draft, setDraft] = useState(createPlanningDraft())
+
+  if (!requestRows.length) {
     return null
   }
 
+  const isBulk = requestRows.length > 1
+  const primaryRow = requestRows[0]
+
   function handleSave() {
-    onSave(plan.id, draft)
-    toast.success('Plan kaydı güncellendi.')
-    onOpenChange(false)
+    const ortakAlanlar = {
+      planlanmaTarihi: new Date().toISOString().slice(0, 10),
+      egitimTarihi: draft.egitimTarihi,
+      egitimTuru: draft.egitimTuru,
+      sure: draft.sure,
+      egitimci: draft.egitimci,
+      maliyet: draft.maliyet,
+      durum: draft.durum,
+      notlar: draft.notlar,
+    }
+
+    try {
+      if (isBulk) {
+        onSaveBatch({
+          selections: requestRows.map((row) => ({
+            talepId: row.talep.id,
+            selectedEgitimIds: [row.egitim.egitimId],
+          })),
+          ortakAlanlar,
+        })
+      } else {
+        onSaveSingle({
+          talepId: primaryRow.talep.id,
+          selectedEgitimIds: [primaryRow.egitim.egitimId],
+          ortakAlanlar,
+        })
+      }
+
+      toast.success(
+        isBulk
+          ? `${requestRows.length} çalışan için eğitim planı oluşturuldu.`
+          : 'Eğitim planlaması oluşturuldu.',
+      )
+      onOpenChange(false)
+    } catch (error) {
+      toast.error(error.message)
+    }
   }
 
   return (
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title="Plan kaydını düzenle"
-      description={`${plan.calisanAdi} için plan bilgilerini güncelleyin`}
+      title={`${primaryRow.egitim.egitimAdi} planla`}
+      description={
+        isBulk
+          ? `${requestRows.length} çalışan için toplu eğitim planı oluşturun`
+          : `${primaryRow.talep.calisanAdi} için eğitim planı oluşturun`
+      }
       footer={
         <>
           <button className="button button--secondary" onClick={() => onOpenChange(false)}>
-            Kapat
+            Vazgeç
           </button>
           <button className="button" onClick={handleSave}>
-            Değişiklikleri Kaydet
+            {isBulk ? 'Toplu Planı Kaydet' : 'Planı Kaydet'}
           </button>
         </>
       }
       maxWidth={860}
     >
+      <div className="detail-grid detail-grid--compact">
+        <div className="detail-card">
+          <span>Eğitim</span>
+          <strong>{primaryRow.egitim.egitimAdi}</strong>
+          <small>{primaryRow.egitim.kategori}</small>
+        </div>
+        <div className="detail-card">
+          <span>Seçilen Çalışan</span>
+          <strong>{requestRows.length}</strong>
+          <small>{isBulk ? 'Toplu planlama akışı' : primaryRow.talep.calisanAdi}</small>
+        </div>
+        <div className="detail-card">
+          <span>GMY Dağılımı</span>
+          <strong>{new Set(requestRows.map((row) => row.talep.gmy)).size}</strong>
+          <small>Benzersiz GMY sayısı</small>
+        </div>
+      </div>
+
+      <div className="employee-preview-list">
+        {requestRows.map((row) => (
+          <div key={getSelectionKey(row)} className="employee-preview-item">
+            <strong>{row.talep.calisanAdi}</strong>
+            <span>{`${row.talep.calisanSicil} • ${row.talep.calisanKullaniciKodu || '-'}`}</span>
+          </div>
+        ))}
+      </div>
+
       <div className="form-grid">
         <label>
           <span>Eğitim Türü</span>
@@ -78,7 +183,7 @@ function EditPlanModal({ plan, open, onOpenChange, onSave }) {
         </label>
         <label>
           <span>Maliyet</span>
-          <input type="number" value={draft.maliyet} onChange={(event) => setDraft({ ...draft, maliyet: Number(event.target.value) })} />
+          <input type="number" min="0" value={draft.maliyet} onChange={(event) => setDraft({ ...draft, maliyet: Number(event.target.value) })} />
         </label>
         <label className="form-grid--full">
           <span>Notlar</span>
@@ -89,124 +194,248 @@ function EditPlanModal({ plan, open, onOpenChange, onSave }) {
   )
 }
 
-export default function EgitimPlaniPage({ planlar, updatePlan, deletePlan }) {
-  const years = getUniqueYears(planlar)
-  const [filters, setFilters] = useState({
-    year: years[0],
-    month: 0,
-    gmy: 'Tümü',
-    type: 'Tümü',
-    status: 'Tümü',
-    employee: '',
+export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTalepler }) {
+  const trainingMap = talepler.reduce((accumulator, talep) => {
+    talep.egitimler.forEach((egitim) => {
+      if (!accumulator[egitim.egitimAdi]) {
+        accumulator[egitim.egitimAdi] = {
+          egitimAdi: egitim.egitimAdi,
+          kategori: egitim.kategori,
+          talepler: [],
+        }
+      }
+
+      accumulator[egitim.egitimAdi].talepler.push({ talep, egitim })
+    })
+
+    return accumulator
+  }, {})
+
+  const trainingGroups = Object.values(trainingMap)
+    .map((group) => {
+      const plannedCount = group.talepler.filter((entry) =>
+        planlar.some((plan) => plan.talepId === entry.talep.id && plan.egitimAdi === entry.egitim.egitimAdi),
+      ).length
+
+      return {
+        ...group,
+        plannedCount,
+        pendingCount: group.talepler.length - plannedCount,
+        employeeCount: new Set(group.talepler.map((entry) => entry.talep.calisanSicil)).size,
+      }
+    })
+    .sort(sortTrainingGroups)
+
+  const [selectedTrainingName, setSelectedTrainingName] = useState(trainingGroups[0]?.egitimAdi || '')
+  const [selectedRequestKeys, setSelectedRequestKeys] = useState([])
+  const [planningRows, setPlanningRows] = useState([])
+
+  const activeTrainingName = trainingGroups.some((item) => item.egitimAdi === selectedTrainingName)
+    ? selectedTrainingName
+    : trainingGroups[0]?.egitimAdi || ''
+
+  const selectedTraining = trainingGroups.find((item) => item.egitimAdi === activeTrainingName)
+  const requestRows = (selectedTraining?.talepler || []).map((entry) => {
+    const relatedPlan = planlar.find(
+      (plan) => plan.talepId === entry.talep.id && plan.egitimAdi === entry.egitim.egitimAdi,
+    )
+
+    return {
+      ...entry,
+      relatedPlan,
+    }
   })
-  const [editingPlan, setEditingPlan] = useState(null)
-  const deferredEmployee = useDeferredValue(filters.employee)
 
-  const filteredPlanlar = planlar.filter((plan) => {
-    const matchesYear = filters.year === 0 || plan.egitimYili === filters.year
-    const matchesMonth = filters.month === 0 || plan.egitimAyi === filters.month
-    const matchesGmy = filters.gmy === 'Tümü' || plan.gmy === filters.gmy
-    const matchesType = filters.type === 'Tümü' || plan.egitimTuru === filters.type
-    const matchesStatus = filters.status === 'Tümü' || plan.durum === filters.status
-    const matchesEmployee = !deferredEmployee || includesText(plan.calisanAdi, deferredEmployee)
+  const pendingRows = requestRows.filter((row) => !row.relatedPlan)
+  const selectedRows = pendingRows.filter((row) => selectedRequestKeys.includes(getSelectionKey(row)))
+  const bekleyenCount = pendingRows.length
+  const allPendingSelected = pendingRows.length > 0 && selectedRows.length === pendingRows.length
 
-    return matchesYear && matchesMonth && matchesGmy && matchesType && matchesStatus && matchesEmployee
-  })
+  function handleToggleRow(row) {
+    const key = getSelectionKey(row)
 
-  function handleDelete(planId) {
-    if (!window.confirm('Bu plan kaydı silinsin mi?')) {
+    setSelectedRequestKeys((current) =>
+      current.includes(key) ? current.filter((item) => item !== key) : [...current, key],
+    )
+  }
+
+  function handleToggleAll() {
+    setSelectedRequestKeys((current) => {
+      if (allPendingSelected) {
+        return current.filter((key) => !pendingRows.some((row) => getSelectionKey(row) === key))
+      }
+
+      const nextKeys = new Set(current)
+      pendingRows.forEach((row) => {
+        nextKeys.add(getSelectionKey(row))
+      })
+      return [...nextKeys]
+    })
+  }
+
+  function openBulkPlanner() {
+    if (!selectedRows.length) {
+      toast.error('Toplu planlama için en az bir çalışan seçin.')
       return
     }
 
-    deletePlan(planId)
-    toast.success('Plan kaydı silindi.')
+    setPlanningRows(selectedRows)
+  }
+
+  function closePlanner() {
+    setPlanningRows([])
   }
 
   return (
     <div className="page-stack">
       <section className="page-toolbar">
         <Card className="surface-card--accent">
-          <span className="eyebrow">Master Plan</span>
-          <h2>Yıl içindeki tüm plan kayıtlarını tek tabloda yönetin</h2>
-          <p>Filtreleri kullanarak eğitim türü, ay, durum ve çalışan kırılımında planı daraltın.</p>
+          <span className="eyebrow">Eğitim Planlama</span>
+          <h2>Çalışanları seçerek tekli veya toplu plan oluşturun</h2>
+          <p>Bekleyen çalışanları işaretleyin, aynı eğitim için tek tek ya da toplu şekilde planlama yapın.</p>
         </Card>
       </section>
 
-      <Card>
-        <PlanFiltrele
-          filters={filters}
-          years={years}
-          onChange={(field, value) => setFilters((current) => ({ ...current, [field]: value }))}
+      {!trainingGroups.length ? (
+        <EmptyState
+          title="Planlanacak talep bulunmuyor"
+          description="Önce Talepler ekranından yeni talep ekleyin veya Excel ile içeri aktarın."
         />
-      </Card>
+      ) : (
+        <>
+          <section className="training-grid">
+            {trainingGroups.map((group) => (
+              <button
+                key={group.egitimAdi}
+                className={`training-card ${activeTrainingName === group.egitimAdi ? 'active' : ''}`.trim()}
+                onClick={() => setSelectedTrainingName(group.egitimAdi)}
+              >
+                <span>{group.kategori}</span>
+                <strong>{group.egitimAdi}</strong>
+                <small>{`${group.pendingCount} bekleyen • ${group.plannedCount} planlandı`}</small>
+                <small className="training-card__meta">{`${group.employeeCount} çalışan • ${group.talepler.length} toplam talep`}</small>
+              </button>
+            ))}
+          </section>
 
-      <Card>
-        <div className="table-wrapper">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Çalışan Adı</th>
-                <th>Sicil</th>
-                <th>GMY</th>
-                <th>Birim</th>
-                <th>Eğitim Adı</th>
-                <th>Kategori</th>
-                <th>Eğitim Türü</th>
-                <th>Planlanan Tarih</th>
-                <th>Ay</th>
-                <th>Süre</th>
-                <th>Eğitimci</th>
-                <th>Durum</th>
-                <th>İşlemler</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredPlanlar.map((plan) => (
-                <tr key={plan.id}>
-                  <td>
-                    <Link className="table-link" to={getEmployeeRoute(plan.calisanSicil)}>
-                      {plan.calisanAdi}
-                    </Link>
-                  </td>
-                  <td>{plan.calisanSicil}</td>
-                  <td>{plan.gmy}</td>
-                  <td>{plan.birim}</td>
-                  <td>{plan.egitimAdi}</td>
-                  <td>{plan.kategori}</td>
-                  <td>
-                    <Badge value={plan.egitimTuru} />
-                  </td>
-                  <td>{formatDate(plan.planlanmaTarihi)}</td>
-                  <td>{getMonthLabel(plan.egitimAyi)}</td>
-                  <td>{plan.sure}</td>
-                  <td>{plan.egitimci}</td>
-                  <td>
-                    <Badge value={plan.durum} />
-                  </td>
-                  <td>
-                    <div className="action-row">
-                      <button className="button button--secondary" onClick={() => setEditingPlan(plan)}>
-                        Düzenle
-                      </button>
-                      <button className="button button--ghost" onClick={() => handleDelete(plan.id)}>
-                        Sil
-                      </button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <div className="table-summary">Filtreye göre toplam kayıt sayısı: {filteredPlanlar.length}</div>
-      </Card>
+          <section className="stats-grid stats-grid--compact">
+            <Card className="mini-stat">
+              <span>Seçili Eğitim</span>
+              <strong>{selectedTraining?.egitimAdi || '-'}</strong>
+            </Card>
+            <Card className="mini-stat">
+              <span>Talep Eden Çalışan</span>
+              <strong>{requestRows.length}</strong>
+            </Card>
+            <Card className="mini-stat">
+              <span>Bekleyen Planlama</span>
+              <strong>{bekleyenCount}</strong>
+            </Card>
+            <Card className="mini-stat">
+              <span>Toplu Seçim</span>
+              <strong>{selectedRows.length}</strong>
+            </Card>
+          </section>
 
-      <EditPlanModal
-        plan={editingPlan}
-        open={Boolean(editingPlan)}
-        onOpenChange={() => setEditingPlan(null)}
-        onSave={updatePlan}
-      />
+          <Card>
+            <div className="section-heading">
+              <div>
+                <h3>{selectedTraining?.egitimAdi}</h3>
+                <p>Bu eğitim için çalışan seçin ve plan durumunu takip edin</p>
+              </div>
+              <div className="selection-toolbar">
+                <button className="button button--secondary" onClick={handleToggleAll}>
+                  {allPendingSelected ? 'Seçimi Temizle' : 'Tüm Bekleyenleri Seç'}
+                </button>
+                <button className="button" disabled={!selectedRows.length} onClick={openBulkPlanner}>
+                  {selectedRows.length ? `${selectedRows.length} Kişiyi Toplu Planla` : 'Toplu Planla'}
+                </button>
+              </div>
+            </div>
+            <div className="table-wrapper">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>
+                      <input
+                        className="table-checkbox"
+                        type="checkbox"
+                        checked={allPendingSelected}
+                        onChange={handleToggleAll}
+                      />
+                    </th>
+                    <th>Çalışan Adı</th>
+                    <th>Sicil</th>
+                    <th>Kullanıcı Kodu</th>
+                    <th>GMY</th>
+                    <th>Yönetici</th>
+                    <th>Notlar</th>
+                    <th>Plan Durumu</th>
+                    <th>İşlem</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {requestRows.map((row) => {
+                    const rowKey = getSelectionKey(row)
+
+                    return (
+                      <tr key={rowKey}>
+                        <td>
+                          <input
+                            className="table-checkbox"
+                            type="checkbox"
+                            checked={selectedRequestKeys.includes(rowKey)}
+                            disabled={Boolean(row.relatedPlan)}
+                            onChange={() => handleToggleRow(row)}
+                          />
+                        </td>
+                        <td>
+                          <Link className="table-link" to={getEmployeeRoute(row.talep.calisanSicil)}>
+                            {row.talep.calisanAdi}
+                          </Link>
+                        </td>
+                        <td>{row.talep.calisanSicil}</td>
+                        <td>{row.talep.calisanKullaniciKodu || '-'}</td>
+                        <td>{row.talep.gmy}</td>
+                        <td>{row.talep.yoneticiAdi}</td>
+                        <td>{row.talep.notlar || '-'}</td>
+                        <td>
+                          {row.relatedPlan ? (
+                            <div className="stack-list stack-list--tight">
+                              <Badge value={row.relatedPlan.durum} />
+                              <span className="table-meta">{formatDate(row.relatedPlan.egitimTarihi)}</span>
+                            </div>
+                          ) : (
+                            <Badge value="beklemede" />
+                          )}
+                        </td>
+                        <td>
+                          <button
+                            className={`button ${row.relatedPlan ? 'button--secondary' : ''}`.trim()}
+                            disabled={Boolean(row.relatedPlan)}
+                            onClick={() => setPlanningRows([row])}
+                          >
+                            {row.relatedPlan ? 'Planlandı' : 'Tekli Planla'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+
+          <TrainingPlanningModal
+            key={planningRows.length ? planningRows.map(getSelectionKey).join('|') : 'planning-modal'}
+            requestRows={planningRows}
+            open={Boolean(planningRows.length)}
+            onOpenChange={closePlanner}
+            onSaveSingle={planTalep}
+            onSaveBatch={planTalepler}
+          />
+        </>
+      )}
     </div>
   )
 }

@@ -8,7 +8,6 @@ function createBlankEgitim(index = 0) {
     egitimId: '',
     egitimAdi: '',
     kategori: EGITIM_KATEGORILERI[0],
-    oncelik: index + 1,
   }
 }
 
@@ -17,9 +16,9 @@ function createInitialForm() {
     yoneticiAdi: '',
     yoneticiEmail: '',
     gmy: GMY_LISTESI[0],
-    birim: '',
     calisanAdi: '',
     calisanSicil: '',
+    calisanKullaniciKodu: '',
     egitimler: [createBlankEgitim(0)],
     notlar: '',
   }
@@ -27,10 +26,12 @@ function createInitialForm() {
 
 export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
   const [form, setForm] = useState(createInitialForm())
+  const [issues, setIssues] = useState([])
 
   useEffect(() => {
     if (!open) {
       setForm(createInitialForm())
+      setIssues([])
     }
   }, [open])
 
@@ -69,7 +70,14 @@ export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
     event.preventDefault()
 
     try {
-      onSubmit(form)
+      const result = onSubmit(form)
+
+      if (result?.issues?.length) {
+        setIssues(result.issues)
+        toast.error('Mükerrer kayıt bulundu. Uyarı listesini kontrol edin.')
+        return
+      }
+
       toast.success('Yeni talep eklendi.')
       onOpenChange(false)
     } catch (error) {
@@ -115,10 +123,6 @@ export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
           </select>
         </label>
         <label>
-          <span>Birim</span>
-          <input value={form.birim} onChange={(event) => setForm({ ...form, birim: event.target.value })} required />
-        </label>
-        <label>
           <span>Çalışan Adı</span>
           <input value={form.calisanAdi} onChange={(event) => setForm({ ...form, calisanAdi: event.target.value })} required />
         </label>
@@ -126,6 +130,28 @@ export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
           <span>Çalışan Sicil No</span>
           <input value={form.calisanSicil} onChange={(event) => setForm({ ...form, calisanSicil: event.target.value })} required />
         </label>
+        <label>
+          <span>Çalışan Kullanıcı Kodu</span>
+          <input value={form.calisanKullaniciKodu} onChange={(event) => setForm({ ...form, calisanKullaniciKodu: event.target.value })} required />
+        </label>
+
+        {issues.length ? (
+          <div className="form-grid--full warning-panel">
+            <div>
+              <strong>Hatalı kayıt uyarısı</strong>
+              <p>Aynı çalışan ve aynı talep içeriğine sahip kayıt yeniden eklenmedi.</p>
+            </div>
+            <div className="warning-list">
+              {issues.map((issue) => (
+                <div key={`${issue.sourceLabel}-${issue.calisanSicil}-${issue.egitimler}`} className="warning-item">
+                  <strong>{issue.sourceLabel}</strong>
+                  <span>{`${issue.calisanAdi || '-'} • ${issue.calisanSicil || '-'} • ${issue.calisanKullaniciKodu || '-'}`}</span>
+                  <small>{issue.reason}</small>
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : null}
 
         <div className="form-grid form-grid--full">
           <div className="section-heading section-heading--tight">
@@ -166,16 +192,6 @@ export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
                   {EGITIM_KATEGORILERI.map((kategori) => (
                     <option key={kategori} value={kategori}>
                       {kategori}
-                    </option>
-                  ))}
-                </select>
-              </label>
-              <label>
-                <span>Öncelik</span>
-                <select value={egitim.oncelik} onChange={(event) => updateEgitim(index, 'oncelik', Number(event.target.value))}>
-                  {[1, 2, 3, 4].map((priority) => (
-                    <option key={priority} value={priority}>
-                      {priority}
                     </option>
                   ))}
                 </select>

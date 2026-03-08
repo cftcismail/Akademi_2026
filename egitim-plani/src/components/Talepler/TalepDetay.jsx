@@ -1,6 +1,5 @@
 import Badge from '../ui/Badge'
 import Modal from '../ui/Modal'
-import { formatDate } from '../../utils/helpers'
 
 export default function TalepDetay({ open, onOpenChange, talep }) {
   if (!talep) {
@@ -19,12 +18,12 @@ export default function TalepDetay({ open, onOpenChange, talep }) {
         <div className="detail-card">
           <span>Çalışan</span>
           <strong>{talep.calisanAdi}</strong>
-          <small>{talep.calisanSicil}</small>
+          <small>{`${talep.calisanSicil} • ${talep.calisanKullaniciKodu || 'Kullanıcı kodu yok'}`}</small>
         </div>
         <div className="detail-card">
           <span>Organizasyon</span>
           <strong>{talep.gmy}</strong>
-          <small>{talep.birim}</small>
+          <small>Yönetici talebi</small>
         </div>
         <div className="detail-card">
           <span>Yönetici</span>
@@ -34,7 +33,7 @@ export default function TalepDetay({ open, onOpenChange, talep }) {
         <div className="detail-card">
           <span>Durum</span>
           <Badge value={talep.durum === 'plana_eklendi' ? 'plana_eklendi' : 'beklemede'} />
-          <small>{formatDate(talep.talepTarihi)}</small>
+          <small>Planlama akışında güncel durum</small>
         </div>
       </div>
 
@@ -44,7 +43,7 @@ export default function TalepDetay({ open, onOpenChange, talep }) {
           <div className="chip-list">
             {talep.egitimler.map((egitim) => (
               <span key={egitim.egitimId} className="chip">
-                {egitim.egitimAdi} • Öncelik {egitim.oncelik}
+                {egitim.egitimAdi}
               </span>
             ))}
           </div>

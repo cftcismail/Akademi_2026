@@ -1,4 +1,4 @@
-import { lazy, Suspense, useState } from 'react'
+import { lazy, Suspense } from 'react'
 import { Route, Routes } from 'react-router-dom'
 import { Toaster } from 'react-hot-toast'
 import Header from './components/Layout/Header'
@@ -12,21 +12,18 @@ const Raporlar = lazy(() => import('./components/Raporlar/Raporlar'))
 const CalisanDetay = lazy(() => import('./components/CalisanDetay'))
 
 function App() {
-  const [sidebarOpen, setSidebarOpen] = useState(true)
   const egitimData = useEgitimData()
 
   return (
-    <div className={`app-shell ${sidebarOpen ? '' : 'sidebar-collapsed'}`}>
-      <Sidebar sidebarOpen={sidebarOpen} />
-      <div className="app-main">
-        <Header
-          sidebarOpen={sidebarOpen}
-          onToggleSidebar={() => setSidebarOpen((current) => !current)}
-          metrics={{
-            talepSayisi: egitimData.talepler.length,
-            planSayisi: egitimData.planlar.length,
-          }}
-        />
+    <div className="app-shell app-shell--topnav">
+      <Header
+        metrics={{
+          talepSayisi: egitimData.talepler.length,
+          planSayisi: egitimData.planlar.length,
+        }}
+      />
+      <div className="app-main app-main--topnav">
+        <Sidebar />
         <main className="page-shell">
           <Suspense fallback={<div className="surface-card page-loading">İçerik yükleniyor...</div>}>
             <Routes>

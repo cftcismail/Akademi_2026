@@ -40,6 +40,42 @@ export function normalizeText(value) {
   return `${value || ''}`.toLocaleLowerCase('tr-TR')
 }
 
+export function normalizeSignatureText(value) {
+  return `${value || ''}`
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+export function buildEgitimSignature(egitimler = []) {
+  return [...egitimler]
+    .filter((egitim) => egitim?.egitimAdi)
+    .map((egitim) => {
+      const egitimAdi = normalizeSignatureText(egitim.egitimAdi)
+      const kategori = normalizeSignatureText(egitim.kategori)
+      return `${egitimAdi}::${kategori}`
+    })
+    .sort((left, right) => left.localeCompare(right, 'tr'))
+    .join('|')
+}
+
+export function buildTalepDuplicateKey(payload) {
+  return [
+    payload.yoneticiAdi,
+    payload.yoneticiEmail,
+    payload.gmy,
+    payload.calisanAdi,
+    payload.calisanSicil,
+    payload.calisanKullaniciKodu,
+    payload.notlar,
+    buildEgitimSignature(payload.egitimler),
+  ]
+    .map((value) => normalizeSignatureText(value))
+    .join('||')
+}
+
 export function includesText(source, query) {
   return normalizeText(source).includes(normalizeText(query))
 }

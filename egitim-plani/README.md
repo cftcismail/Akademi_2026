@@ -6,7 +6,9 @@
 
 - Dashboard KPI kartları ve grafikler
 - Eğitim talebi oluşturma, detay izleme ve plana dönüştürme
-- Eğitim planı master tablosu, filtreleme, düzenleme ve silme
+- Excel ile toplu talep içeri aktarma
+- Mükerrer satırlar için uyarı listesi
+- Eğitim bazlı çalışan listesi üzerinden tekli ve toplu planlama
 - Çalışan detay görünümü
 - Yönetim raporları ve CSV dışa aktarma
 - localStorage tabanlı kalıcı tarayıcı verisi
@@ -49,8 +51,27 @@ Veriler tarayıcı localStorage üzerinde aşağıdaki anahtarlarla saklanır:
 - `egitim-plani:talepler`
 - `egitim-plani:planlar`
 
+## Excel İçeri Aktarma
+
+Talepler ekranındaki yükleme alanı `.xlsx`, `.xls` ve `.csv` dosyalarını kabul eder. İlk sayfadaki veriler aşağıdaki kolon isimleriyle okunur:
+
+- Hazır örnek dosya: `public/ornek-talep-aktarim.xlsx`
+
+- `Yönetici Adı`
+- `Yönetici E-posta`
+- `GMY`
+- `Çalışan Adı`
+- `Çalışan Sicil No`
+- `Çalışan Kullanıcı Kodu`
+- `Notlar`
+- `Eğitim 1 Adı`, `Eğitim 1 Kategori`
+- `Eğitim 2 Adı`, `Eğitim 2 Kategori`
+- `Eğitim 3 Adı`, `Eğitim 3 Kategori`
+- `Eğitim 4 Adı`, `Eğitim 4 Kategori`
+
 ## Notlar
 
-- İlk açılışta örnek veriler yüklenir.
+- İlk açılışta örnek kayıt yüklenmez; ekranlar boş başlar.
 - Tarayıcı verisi temizlenirse kayıtlar silinir.
+- Aynı çalışan ve aynı içerik tekrar eklenirse kayıt atlanır ve uyarı listesinde gösterilir.
 - Çok kullanıcılı kullanım için ileride Supabase entegrasyonu eklenebilir.

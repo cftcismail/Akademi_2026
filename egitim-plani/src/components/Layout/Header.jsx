@@ -1,6 +1,6 @@
 import { format } from 'date-fns'
 import { tr } from 'date-fns/locale'
-import { Bell, Menu, PanelLeftClose, Search } from 'lucide-react'
+import { Bell, Search } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
 import { ROUTE_BASLIKLARI } from '../../data/constants'
 
@@ -15,16 +15,13 @@ function getHeaderContent(pathname) {
   return ROUTE_BASLIKLARI[pathname] || ROUTE_BASLIKLARI['/']
 }
 
-export default function Header({ onToggleSidebar, sidebarOpen, metrics }) {
+export default function Header({ metrics }) {
   const { pathname } = useLocation()
   const content = getHeaderContent(pathname)
 
   return (
     <header className="topbar">
       <div className="topbar__intro">
-        <button className="icon-button icon-button--ghost" onClick={onToggleSidebar}>
-          {sidebarOpen ? <PanelLeftClose size={18} /> : <Menu size={18} />}
-        </button>
         <div>
           <span className="eyebrow">Eğitim Yönetimi</span>
           <h1>{content.title}</h1>

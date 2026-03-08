@@ -17,8 +17,7 @@ export default function Dashboard({ planlar, talepler }) {
   )
 
   const filteredTalepler = talepler.filter((talep) => {
-    const talepYear = new Date(talep.talepTarihi).getFullYear()
-    return talepYear === Number(selectedYear) && (selectedGmy === 'Tümü' || talep.gmy === selectedGmy)
+    return selectedGmy === 'Tümü' || talep.gmy === selectedGmy
   })
 
   const stats = {

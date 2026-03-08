@@ -25,14 +25,12 @@ export default function CalisanDetay({ talepler, planlar }) {
         <Card className="detail-card detail-card--hero">
           <span>Çalışan</span>
           <strong>{profile.calisanAdi}</strong>
-          <small>
-            Sicil: {profile.calisanSicil} • {profile.birim}
-          </small>
+          <small>{`Sicil: ${profile.calisanSicil} • Kullanıcı Kodu: ${profile.calisanKullaniciKodu || '-'}`}</small>
         </Card>
         <Card className="detail-card detail-card--hero">
           <span>GMY</span>
           <strong>{profile.gmy}</strong>
-          <small>Birim: {profile.birim}</small>
+          <small>Organizasyon kırılımı</small>
         </Card>
         <Card className="detail-card detail-card--hero">
           <span>Talep Sayısı</span>
@@ -91,7 +89,7 @@ export default function CalisanDetay({ talepler, planlar }) {
         <div className="timeline-list">
           {calisanTalepleri.map((talep) => (
             <div key={talep.id} className="timeline-item">
-              <span>{formatDate(talep.talepTarihi)}</span>
+              <span>Talep</span>
               <div>
                 <strong>Talep açıldı</strong>
                 <p>{talep.egitimler.map((egitim) => egitim.egitimAdi).join(', ')}</p>

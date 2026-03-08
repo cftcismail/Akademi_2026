@@ -88,7 +88,7 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit }) {
         <div className="detail-card">
           <span>Çalışan</span>
           <strong>{talep.calisanAdi}</strong>
-          <small>{talep.calisanSicil}</small>
+          <small>{`${talep.calisanSicil} • ${talep.calisanKullaniciKodu || 'Kullanıcı kodu yok'}`}</small>
         </div>
         <div className="detail-card">
           <span>Yönetici</span>
@@ -96,9 +96,9 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit }) {
           <small>{talep.yoneticiEmail}</small>
         </div>
         <div className="detail-card">
-          <span>GMY / Birim</span>
+          <span>GMY</span>
           <strong>{talep.gmy}</strong>
-          <small>{talep.birim}</small>
+          <small>Talep üzerinden planlanacak</small>
         </div>
       </div>
 
@@ -118,9 +118,7 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit }) {
             />
             <div>
               <strong>{egitim.egitimAdi}</strong>
-              <span>
-                {egitim.kategori} • Öncelik {egitim.oncelik}
-              </span>
+              <span>{egitim.kategori}</span>
             </div>
           </label>
         ))}
