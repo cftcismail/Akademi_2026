@@ -13,6 +13,21 @@ function buildDraftMap(gmyList) {
   return Object.fromEntries(gmyList.map((gmy) => [gmy, gmy]))
 }
 
+function buildCatalogDraftMap(katalog) {
+  return Object.fromEntries(
+    katalog.map((item) => [
+      item.id,
+      {
+        kod: item.kod || '',
+        ad: item.ad || '',
+        kategori: item.kategori || '',
+        sure: item.sure || '1 gün',
+        aciklama: item.aciklama || '',
+      },
+    ]),
+  )
+}
+
 export default function AdminPage({
   talepler,
   planlar,
@@ -24,6 +39,9 @@ export default function AdminPage({
   addGmy,
   updateGmy,
   deleteGmy,
+  addKatalogItem,
+  updateKatalogItem,
+  deleteKatalogItem,
   addEgitimKategorisi,
   updateEgitimKategorisi,
   deleteEgitimKategorisi,
@@ -35,6 +53,13 @@ export default function AdminPage({
   const [password, setPassword] = useState('')
   const [newGmy, setNewGmy] = useState('')
   const [newKategori, setNewKategori] = useState('')
+  const [newCatalogItem, setNewCatalogItem] = useState({
+    kod: '',
+    ad: '',
+    kategori: egitimKategorileri[0] || 'Teknik',
+    sure: '1 gün',
+    aciklama: '',
+  })
   const [selectedTalepYear, setSelectedTalepYear] = useState(new Date().getFullYear())
   const [showTalepForm, setShowTalepForm] = useState(false)
   const [validationIssues, setValidationIssues] = useState([])
@@ -42,6 +67,7 @@ export default function AdminPage({
   const [yearToDelete, setYearToDelete] = useState(null)
   const [gmyDrafts, setGmyDrafts] = useState(() => buildDraftMap(gmyList))
   const [kategoriDrafts, setKategoriDrafts] = useState(() => buildDraftMap(egitimKategorileri))
+  const [catalogDrafts, setCatalogDrafts] = useState(() => buildCatalogDraftMap(katalog))
   const [isImporting, setIsImporting] = useState(false)
   const fileInputRef = useRef(null)
 
@@ -53,6 +79,25 @@ export default function AdminPage({
     setKategoriDrafts(buildDraftMap(egitimKategorileri))
   }, [egitimKategorileri])
 
+  useEffect(() => {
+    setCatalogDrafts(buildCatalogDraftMap(katalog))
+  }, [katalog])
+
+  useEffect(() => {
+    if (!egitimKategorileri.length) {
+      return
+    }
+
+    setNewCatalogItem((current) =>
+      egitimKategorileri.includes(current.kategori)
+        ? current
+        : {
+            ...current,
+            kategori: egitimKategorileri[0],
+          },
+    )
+  }, [egitimKategorileri])
+
   const usageByGmy = useMemo(() => {
     return gmyList.reduce((accumulator, gmy) => {
       accumulator[gmy] = {
@@ -62,6 +107,26 @@ export default function AdminPage({
       return accumulator
     }, {})
   }, [gmyList, planlar, talepler])
+
+  const usageByCatalog = useMemo(
+    () =>
+      katalog.reduce((accumulator, item) => {
+        accumulator[item.id] = {
+          talep: talepler.filter((talep) =>
+            talep.egitimler.some(
+              (egitim) =>
+                (egitim.egitimId && egitim.egitimId === item.id) ||
+                (`${egitim.egitimKodu || ''}`.trim() === `${item.kod || ''}`.trim() && egitim.egitimAdi === item.ad),
+            ),
+          ).length,
+          plan: planlar.filter(
+            (plan) => `${plan.egitimKodu || ''}`.trim() === `${item.kod || ''}`.trim() && plan.egitimAdi === item.ad,
+          ).length,
+        }
+        return accumulator
+      }, {}),
+    [katalog, planlar, talepler],
+  )
 
   const talepYearSummary = useMemo(
     () =>
@@ -115,6 +180,22 @@ export default function AdminPage({
       addEgitimKategorisi(newKategori)
       setNewKategori('')
       toast.success('Yeni eğitim kategorisi eklendi.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleAddCatalogItem() {
+    try {
+      addKatalogItem(newCatalogItem)
+      setNewCatalogItem({
+        kod: '',
+        ad: '',
+        kategori: egitimKategorileri[0] || 'Teknik',
+        sure: '1 gün',
+        aciklama: '',
+      })
+      toast.success('Katalog eğitimi eklendi.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -196,6 +277,15 @@ export default function AdminPage({
     }
   }
 
+  function handleSaveCatalogItem(itemId) {
+    try {
+      updateKatalogItem(itemId, catalogDrafts[itemId])
+      toast.success('Katalog kaydı güncellendi.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
   function handleDeleteGmy(name) {
     try {
       deleteGmy(name)
@@ -209,6 +299,15 @@ export default function AdminPage({
     try {
       deleteEgitimKategorisi(name)
       toast.success('Eğitim kategorisi kaldırıldı.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleDeleteCatalogItem(itemId) {
+    try {
+      deleteKatalogItem(itemId)
+      toast.success('Katalog kaydı kaldırıldı.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -350,6 +449,157 @@ export default function AdminPage({
                   Kaydet
                 </button>
                 <button className="button button--ghost" onClick={() => handleDeleteKategori(kategori)}>
+                  <Trash2 size={16} />
+                  Sil
+                </button>
+              </div>
+            </Card>
+          ))}
+        </div>
+      </Card>
+
+      <Card>
+        <div className="section-heading section-heading--tight">
+          <div>
+            <h3>Katalog yönetimi</h3>
+            <p>Eğitim kodu, adı, kategori ve süre bilgilerini admin ekranından yönetin.</p>
+          </div>
+        </div>
+        <div className="form-grid">
+          <label>
+            <span>Eğitim Kodu</span>
+            <input
+              value={newCatalogItem.kod}
+              onChange={(event) => setNewCatalogItem((current) => ({ ...current, kod: event.target.value.toUpperCase() }))}
+              placeholder="Örn. TE_001"
+            />
+          </label>
+          <label>
+            <span>Eğitim Adı</span>
+            <input
+              value={newCatalogItem.ad}
+              onChange={(event) => setNewCatalogItem((current) => ({ ...current, ad: event.target.value }))}
+              placeholder="Örn. Temel Network"
+            />
+          </label>
+          <label>
+            <span>Kategori</span>
+            <select
+              value={newCatalogItem.kategori}
+              onChange={(event) => setNewCatalogItem((current) => ({ ...current, kategori: event.target.value }))}
+            >
+              {egitimKategorileri.map((kategori) => (
+                <option key={kategori} value={kategori}>
+                  {kategori}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label>
+            <span>Süre</span>
+            <input
+              value={newCatalogItem.sure}
+              onChange={(event) => setNewCatalogItem((current) => ({ ...current, sure: event.target.value }))}
+              placeholder="Örn. 2 gün"
+            />
+          </label>
+          <label className="form-grid--full">
+            <span>Açıklama</span>
+            <textarea
+              rows={3}
+              value={newCatalogItem.aciklama}
+              onChange={(event) => setNewCatalogItem((current) => ({ ...current, aciklama: event.target.value }))}
+              placeholder="Opsiyonel katalog açıklaması"
+            />
+          </label>
+        </div>
+        <div className="admin-gmy-card__actions">
+          <button className="button" onClick={handleAddCatalogItem}>
+            <Plus size={16} />
+            Kataloğa Ekle
+          </button>
+        </div>
+        <div className="admin-grid">
+          {katalog.map((item) => (
+            <Card key={item.id} className="admin-gmy-card">
+              <div className="admin-gmy-card__meta">
+                <span className="eyebrow">Katalog</span>
+                <strong>{`${item.kod ? `${item.kod} • ` : ''}${item.ad}`}</strong>
+                <small>{`${usageByCatalog[item.id]?.talep || 0} talep • ${usageByCatalog[item.id]?.plan || 0} plan`}</small>
+              </div>
+              <label>
+                <span>Eğitim Kodu</span>
+                <input
+                  value={catalogDrafts[item.id]?.kod || ''}
+                  onChange={(event) =>
+                    setCatalogDrafts((current) => ({
+                      ...current,
+                      [item.id]: { ...current[item.id], kod: event.target.value.toUpperCase() },
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Eğitim Adı</span>
+                <input
+                  value={catalogDrafts[item.id]?.ad || ''}
+                  onChange={(event) =>
+                    setCatalogDrafts((current) => ({
+                      ...current,
+                      [item.id]: { ...current[item.id], ad: event.target.value },
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Kategori</span>
+                <select
+                  value={catalogDrafts[item.id]?.kategori || egitimKategorileri[0] || 'Teknik'}
+                  onChange={(event) =>
+                    setCatalogDrafts((current) => ({
+                      ...current,
+                      [item.id]: { ...current[item.id], kategori: event.target.value },
+                    }))
+                  }
+                >
+                  {egitimKategorileri.map((kategori) => (
+                    <option key={kategori} value={kategori}>
+                      {kategori}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Süre</span>
+                <input
+                  value={catalogDrafts[item.id]?.sure || ''}
+                  onChange={(event) =>
+                    setCatalogDrafts((current) => ({
+                      ...current,
+                      [item.id]: { ...current[item.id], sure: event.target.value },
+                    }))
+                  }
+                />
+              </label>
+              <label>
+                <span>Açıklama</span>
+                <textarea
+                  rows={3}
+                  value={catalogDrafts[item.id]?.aciklama || ''}
+                  onChange={(event) =>
+                    setCatalogDrafts((current) => ({
+                      ...current,
+                      [item.id]: { ...current[item.id], aciklama: event.target.value },
+                    }))
+                  }
+                />
+              </label>
+              <div className="admin-gmy-card__actions">
+                <button className="button" onClick={() => handleSaveCatalogItem(item.id)}>
+                  <Save size={16} />
+                  Kaydet
+                </button>
+                <button className="button button--ghost" onClick={() => handleDeleteCatalogItem(item.id)}>
                   <Trash2 size={16} />
                   Sil
                 </button>

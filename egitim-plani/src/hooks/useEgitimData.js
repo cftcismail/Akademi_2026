@@ -105,11 +105,26 @@ function normalizeCatalogItem(item) {
   return {
     id: item.id,
     kod: `${item.kod || ''}`.trim(),
-    ad: item.ad,
+    ad: `${item.ad || ''}`.trim(),
     kategori: item.kategori || 'Teknik',
     sure: item.sure || '1 gün',
     aciklama: item.aciklama || '',
   }
+}
+
+function matchesCatalogTraining(egitim, catalogItem) {
+  if (!egitim || !catalogItem) {
+    return false
+  }
+
+  if (egitim.egitimId && catalogItem.id && egitim.egitimId === catalogItem.id) {
+    return true
+  }
+
+  const sameName = normalizeSignatureText(egitim.egitimAdi) === normalizeSignatureText(catalogItem.ad)
+  const sameCode = normalizeSignatureText(egitim.egitimKodu) === normalizeSignatureText(catalogItem.kod)
+
+  return sameName && sameCode
 }
 
 function isSeededSampleId(id, pattern) {
@@ -456,6 +471,140 @@ export default function useEgitimData() {
     setEgitimKategorileri((current) => current.filter((item) => item !== target))
   }
 
+  function addKatalogItem(payload) {
+    const nextItem = normalizeCatalogItem({
+      id: uuidv4(),
+      kod: payload.kod,
+      ad: payload.ad,
+      kategori: payload.kategori,
+      sure: payload.sure,
+      aciklama: payload.aciklama,
+    })
+
+    if (!nextItem.ad) {
+      throw new Error('Eğitim adı boş olamaz.')
+    }
+
+    const duplicateNameExists = katalog.some(
+      (item) => normalizeSignatureText(item.ad) === normalizeSignatureText(nextItem.ad),
+    )
+
+    if (duplicateNameExists) {
+      throw new Error('Aynı isimde eğitim katalogda zaten mevcut.')
+    }
+
+    if (nextItem.kod) {
+      const duplicateCodeExists = katalog.some(
+        (item) => normalizeSignatureText(item.kod) === normalizeSignatureText(nextItem.kod),
+      )
+
+      if (duplicateCodeExists) {
+        throw new Error('Aynı eğitim kodu katalogda zaten mevcut.')
+      }
+    }
+
+    setKatalog((current) => [nextItem, ...current])
+    setEgitimKategorileri((current) => syncKategoriEntries(current, [{ kategori: nextItem.kategori }]))
+    return nextItem
+  }
+
+  function updateKatalogItem(itemId, payload) {
+    const currentItem = katalog.find((item) => item.id === itemId)
+
+    if (!currentItem) {
+      throw new Error('Güncellenecek katalog kaydı bulunamadı.')
+    }
+
+    const nextItem = normalizeCatalogItem({
+      ...currentItem,
+      ...payload,
+      id: currentItem.id,
+    })
+
+    if (!nextItem.ad) {
+      throw new Error('Eğitim adı boş olamaz.')
+    }
+
+    const duplicateNameExists = katalog.some(
+      (item) => item.id !== itemId && normalizeSignatureText(item.ad) === normalizeSignatureText(nextItem.ad),
+    )
+
+    if (duplicateNameExists) {
+      throw new Error('Bu isimde başka bir katalog kaydı zaten var.')
+    }
+
+    if (nextItem.kod) {
+      const duplicateCodeExists = katalog.some(
+        (item) => item.id !== itemId && normalizeSignatureText(item.kod) === normalizeSignatureText(nextItem.kod),
+      )
+
+      if (duplicateCodeExists) {
+        throw new Error('Bu eğitim kodu başka bir katalog kaydında kullanılıyor.')
+      }
+    }
+
+    setKatalog((current) => current.map((item) => (item.id === itemId ? nextItem : item)))
+    setTalepler((current) =>
+      current.map((talep) => ({
+        ...talep,
+        egitimler: talep.egitimler.map((egitim) =>
+          matchesCatalogTraining(egitim, currentItem)
+            ? {
+                ...egitim,
+                egitimId: nextItem.id,
+                egitimKodu: nextItem.kod,
+                egitimAdi: nextItem.ad,
+                kategori: nextItem.kategori,
+              }
+            : egitim,
+        ),
+      })),
+    )
+    setPlanlar((current) =>
+      current.map((plan) => {
+        const sameName = normalizeSignatureText(plan.egitimAdi) === normalizeSignatureText(currentItem.ad)
+        const sameCode = normalizeSignatureText(plan.egitimKodu) === normalizeSignatureText(currentItem.kod)
+
+        if (!sameName && !sameCode) {
+          return plan
+        }
+
+        return {
+          ...plan,
+          egitimKodu: nextItem.kod,
+          egitimAdi: nextItem.ad,
+          kategori: nextItem.kategori,
+        }
+      }),
+    )
+    setEgitimKategorileri((current) => syncKategoriEntries(current, [{ kategori: nextItem.kategori }]))
+
+    return nextItem
+  }
+
+  function deleteKatalogItem(itemId) {
+    const targetItem = katalog.find((item) => item.id === itemId)
+
+    if (!targetItem) {
+      throw new Error('Silinecek katalog kaydı bulunamadı.')
+    }
+
+    const isUsedInTalepler = talepler.some((talep) =>
+      talep.egitimler.some((egitim) => matchesCatalogTraining(egitim, targetItem)),
+    )
+    const isUsedInPlanlar = planlar.some((plan) => {
+      const sameName = normalizeSignatureText(plan.egitimAdi) === normalizeSignatureText(targetItem.ad)
+      const sameCode = normalizeSignatureText(plan.egitimKodu) === normalizeSignatureText(targetItem.kod)
+      return sameName || sameCode
+    })
+
+    if (isUsedInTalepler || isUsedInPlanlar) {
+      throw new Error('Bu katalog kaydı aktif talep veya planlarda kullanılıyor. Önce bağlantılı kayıtları güncelleyin.')
+    }
+
+    setKatalog((current) => current.filter((item) => item.id !== itemId))
+  }
+
   function addTalep(payload) {
     const nextRecord = createTalepRecord(payload)
 
@@ -740,6 +889,9 @@ export default function useEgitimData() {
     addGmy,
     updateGmy,
     deleteGmy,
+    addKatalogItem,
+    updateKatalogItem,
+    deleteKatalogItem,
     addEgitimKategorisi,
     updateEgitimKategorisi,
     deleteEgitimKategorisi,
