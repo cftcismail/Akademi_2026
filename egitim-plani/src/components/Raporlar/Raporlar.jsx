@@ -1,10 +1,10 @@
 import { useState } from 'react'
 import { Bar, BarChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts'
-import { AYLAR, GMY_LISTESI } from '../../data/constants'
+import { AYLAR } from '../../data/constants'
 import { downloadCsv, formatCurrency, getUniqueYears } from '../../utils/helpers'
 import Card from '../ui/Card'
 
-export default function Raporlar({ planlar }) {
+export default function Raporlar({ planlar, gmyList }) {
   const years = getUniqueYears(planlar)
   const [selectedYear, setSelectedYear] = useState(years[0])
 
@@ -19,7 +19,7 @@ export default function Raporlar({ planlar }) {
   const yillikPlan = currentYearPlans.filter((plan) => plan.egitimTuru === 'Yıllık Plan').length
   const planDisi = currentYearPlans.filter((plan) => plan.egitimTuru === 'Yıllık Plan Dışı').length
 
-  const gmySummary = GMY_LISTESI.map((gmy) => ({
+  const gmySummary = gmyList.map((gmy) => ({
     gmy,
     count: currentYearPlans.filter((plan) => plan.gmy === gmy).length,
   })).filter((item) => item.count > 0)

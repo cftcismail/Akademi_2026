@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { AYLAR, DURUM_LISTESI, GMY_LISTESI, KPI_KARTLARI } from '../../data/constants'
+import { AYLAR, DURUM_LISTESI, KPI_KARTLARI } from '../../data/constants'
 import { getUniqueYears } from '../../utils/helpers'
 import AylikPlanChart from './AylikPlanChart'
 import EgitimDurumChart from './EgitimDurumChart'
@@ -7,17 +7,18 @@ import GMYChart from './GMYChart'
 import StatCard from './StatCard'
 import TopEgitimlerChart from './TopEgitimlerChart'
 
-export default function Dashboard({ planlar, talepler }) {
+export default function Dashboard({ planlar, talepler, gmyList }) {
   const years = getUniqueYears(planlar)
   const [selectedYear, setSelectedYear] = useState(years[0])
   const [selectedGmy, setSelectedGmy] = useState('Tümü')
+  const activeGmy = selectedGmy === 'Tümü' || gmyList.includes(selectedGmy) ? selectedGmy : 'Tümü'
 
   const filteredPlans = planlar.filter(
-    (plan) => plan.egitimYili === Number(selectedYear) && (selectedGmy === 'Tümü' || plan.gmy === selectedGmy),
+    (plan) => plan.egitimYili === Number(selectedYear) && (activeGmy === 'Tümü' || plan.gmy === activeGmy),
   )
 
   const filteredTalepler = talepler.filter((talep) => {
-    return selectedGmy === 'Tümü' || talep.gmy === selectedGmy
+    return activeGmy === 'Tümü' || talep.gmy === activeGmy
   })
 
   const stats = {
@@ -42,7 +43,7 @@ export default function Dashboard({ planlar, talepler }) {
     value: filteredPlans.filter((plan) => plan.durum === status).length,
   })).filter((item) => item.value > 0)
 
-  const gmyData = GMY_LISTESI.map((gmy) => {
+  const gmyData = gmyList.map((gmy) => {
     const plansByGmy = filteredPlans.filter((plan) => plan.gmy === gmy)
     return {
       gmy,
@@ -108,9 +109,9 @@ export default function Dashboard({ planlar, talepler }) {
           </label>
           <label>
             <span>GMY</span>
-            <select value={selectedGmy} onChange={(event) => setSelectedGmy(event.target.value)}>
+            <select value={activeGmy} onChange={(event) => setSelectedGmy(event.target.value)}>
               <option value="Tümü">Tümü</option>
-              {GMY_LISTESI.map((gmy) => (
+              {gmyList.map((gmy) => (
                 <option key={gmy} value={gmy}>
                   {gmy}
                 </option>

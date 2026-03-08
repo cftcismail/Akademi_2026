@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { format } from 'date-fns'
-import { LOCAL_STORAGE_KEYS } from '../data/constants'
+import { GMY_LISTESI, LOCAL_STORAGE_KEYS } from '../data/constants'
 import { initialCatalog, initialPlanlar, initialTalepler } from '../data/initialData'
 import { buildTalepDuplicateKey, normalizeSignatureText } from '../utils/helpers'
 import useLocalStorage from './useLocalStorage'
@@ -87,6 +87,21 @@ function normalizeCatalogItem(item) {
 
 function isSeededSampleId(id, pattern) {
   return pattern.test(id || '')
+}
+
+function normalizeGmyList(gmyList, talepler, planlar) {
+  const values = [...(gmyList?.length ? gmyList : GMY_LISTESI), ...talepler.map((item) => item.gmy), ...planlar.map((item) => item.gmy)]
+
+  return values.reduce((accumulator, value) => {
+    const normalized = `${value || ''}`.trim()
+
+    if (!normalized || accumulator.includes(normalized)) {
+      return accumulator
+    }
+
+    accumulator.push(normalized)
+    return accumulator
+  }, [])
 }
 
 function isEmptyTalepPayload(payload) {
@@ -199,8 +214,14 @@ export default function useEgitimData() {
   const [katalog, setKatalog] = useLocalStorage(LOCAL_STORAGE_KEYS.katalog, initialCatalog)
   const [talepler, setTalepler] = useLocalStorage(LOCAL_STORAGE_KEYS.talepler, initialTalepler)
   const [planlar, setPlanlar] = useLocalStorage(LOCAL_STORAGE_KEYS.planlar, initialPlanlar)
+  const [gmyList, setGmyList] = useLocalStorage(LOCAL_STORAGE_KEYS.gmyList, GMY_LISTESI)
 
   useEffect(() => {
+    setGmyList((current) => {
+      const cleaned = normalizeGmyList(current, talepler, planlar)
+      return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
+    })
+
     setKatalog((current) => {
       const cleaned = current
         .filter((item) => !isSeededSampleId(item.id, /^catalog-\d+$/))
@@ -224,7 +245,65 @@ export default function useEgitimData() {
 
       return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
     })
-  }, [setKatalog, setPlanlar, setTalepler])
+  }, [planlar, setGmyList, setKatalog, setPlanlar, setTalepler, talepler])
+
+  function addGmy(name) {
+    const nextName = `${name || ''}`.trim()
+
+    if (!nextName) {
+      throw new Error('GMY adı boş olamaz.')
+    }
+
+    if (gmyList.includes(nextName)) {
+      throw new Error('Aynı isimde GMY zaten mevcut.')
+    }
+
+    setGmyList((current) => [...current, nextName])
+    return nextName
+  }
+
+  function updateGmy(previousName, nextName) {
+    const previous = `${previousName || ''}`.trim()
+    const next = `${nextName || ''}`.trim()
+
+    if (!previous || !next) {
+      throw new Error('GMY adı boş olamaz.')
+    }
+
+    if (previous === next) {
+      return next
+    }
+
+    if (gmyList.includes(next)) {
+      throw new Error('Bu isimde başka bir GMY zaten var.')
+    }
+
+    setGmyList((current) => current.map((item) => (item === previous ? next : item)))
+    setTalepler((current) => current.map((item) => (item.gmy === previous ? { ...item, gmy: next } : item)))
+    setPlanlar((current) => current.map((item) => (item.gmy === previous ? { ...item, gmy: next } : item)))
+
+    return next
+  }
+
+  function deleteGmy(name) {
+    const target = `${name || ''}`.trim()
+
+    if (!target) {
+      throw new Error('Silinecek GMY bulunamadı.')
+    }
+
+    if (gmyList.length <= 1) {
+      throw new Error('Sistemde en az 1 GMY kalmalıdır.')
+    }
+
+    const isUsed = talepler.some((item) => item.gmy === target) || planlar.some((item) => item.gmy === target)
+
+    if (isUsed) {
+      throw new Error('Bu GMY aktif kayıtlarda kullanılıyor. Önce başka bir GMY ile değiştirin.')
+    }
+
+    setGmyList((current) => current.filter((item) => item !== target))
+  }
 
   function addTalep(payload) {
     const nextRecord = createTalepRecord(payload)
@@ -440,11 +519,15 @@ export default function useEgitimData() {
     katalog,
     talepler,
     planlar,
+    gmyList,
     addTalep,
     importTalepler,
     planTalep,
     planTalepler,
     updatePlan,
     deletePlan,
+    addGmy,
+    updateGmy,
+    deleteGmy,
   }
 }

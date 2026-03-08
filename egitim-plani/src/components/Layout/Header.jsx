@@ -2,13 +2,20 @@ import { format } from 'date-fns'
 import { tr } from 'date-fns/locale'
 import { Bell, Search } from 'lucide-react'
 import { useLocation } from 'react-router-dom'
-import { ROUTE_BASLIKLARI } from '../../data/constants'
+import { ADMIN_ROUTE, ROUTE_BASLIKLARI } from '../../data/constants'
 
 function getHeaderContent(pathname) {
   if (pathname.startsWith('/calisanlar/')) {
     return {
       title: 'Çalışan Detayı',
       description: 'Seçili çalışanın talep ve plan geçmişi.',
+    }
+  }
+
+  if (pathname.startsWith(ADMIN_ROUTE)) {
+    return {
+      title: 'Admin Akademi',
+      description: 'GMY ayarlarını ve yönetim erişimini kontrol edin.',
     }
   }
 

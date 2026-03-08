@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { EGITIM_KATEGORILERI, GMY_LISTESI } from '../../data/constants'
+import { EGITIM_KATEGORILERI } from '../../data/constants'
 import Modal from '../ui/Modal'
 
 function createBlankEgitim(index = 0) {
@@ -11,11 +11,11 @@ function createBlankEgitim(index = 0) {
   }
 }
 
-function createInitialForm() {
+function createInitialForm(gmyList) {
   return {
     yoneticiAdi: '',
     yoneticiEmail: '',
-    gmy: GMY_LISTESI[0],
+    gmy: gmyList[0] || '',
     calisanAdi: '',
     calisanSicil: '',
     calisanKullaniciKodu: '',
@@ -24,16 +24,27 @@ function createInitialForm() {
   }
 }
 
-export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
-  const [form, setForm] = useState(createInitialForm())
-  const [issues, setIssues] = useState([])
+export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubmit, onIssues }) {
+  const [form, setForm] = useState(createInitialForm(gmyList))
 
   useEffect(() => {
     if (!open) {
-      setForm(createInitialForm())
-      setIssues([])
+      setForm(createInitialForm(gmyList))
     }
-  }, [open])
+  }, [gmyList, open])
+
+  useEffect(() => {
+    if (!gmyList.length) {
+      return
+    }
+
+    if (!gmyList.includes(form.gmy)) {
+      setForm((current) => ({
+        ...current,
+        gmy: gmyList[0],
+      }))
+    }
+  }, [form.gmy, gmyList])
 
   function updateEgitim(index, field, value) {
     setForm((current) => {
@@ -73,7 +84,7 @@ export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
       const result = onSubmit(form)
 
       if (result?.issues?.length) {
-        setIssues(result.issues)
+        onIssues?.(result.issues)
         toast.error('Mükerrer kayıt bulundu. Uyarı listesini kontrol edin.')
         return
       }
@@ -115,7 +126,7 @@ export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
         <label>
           <span>GMY</span>
           <select value={form.gmy} onChange={(event) => setForm({ ...form, gmy: event.target.value })}>
-            {GMY_LISTESI.map((gmy) => (
+            {gmyList.map((gmy) => (
               <option key={gmy} value={gmy}>
                 {gmy}
               </option>
@@ -134,24 +145,6 @@ export default function TalepForm({ open, onOpenChange, katalog, onSubmit }) {
           <span>Çalışan Kullanıcı Kodu</span>
           <input value={form.calisanKullaniciKodu} onChange={(event) => setForm({ ...form, calisanKullaniciKodu: event.target.value })} required />
         </label>
-
-        {issues.length ? (
-          <div className="form-grid--full warning-panel">
-            <div>
-              <strong>Hatalı kayıt uyarısı</strong>
-              <p>Aynı çalışan ve aynı talep içeriğine sahip kayıt yeniden eklenmedi.</p>
-            </div>
-            <div className="warning-list">
-              {issues.map((issue) => (
-                <div key={`${issue.sourceLabel}-${issue.calisanSicil}-${issue.egitimler}`} className="warning-item">
-                  <strong>{issue.sourceLabel}</strong>
-                  <span>{`${issue.calisanAdi || '-'} • ${issue.calisanSicil || '-'} • ${issue.calisanKullaniciKodu || '-'}`}</span>
-                  <small>{issue.reason}</small>
-                </div>
-              ))}
-            </div>
-          </div>
-        ) : null}
 
         <div className="form-grid form-grid--full">
           <div className="section-heading section-heading--tight">

@@ -1,10 +1,12 @@
 import {
+  LockKeyhole,
   BarChart3,
   CalendarRange,
   ClipboardList,
   GraduationCap,
 } from 'lucide-react'
 import { NavLink } from 'react-router-dom'
+import { ADMIN_ROUTE } from '../../data/constants'
 
 const navigationItems = [
   { to: '/', label: 'Dashboard', icon: BarChart3 },
@@ -13,7 +15,11 @@ const navigationItems = [
   { to: '/raporlar', label: 'Raporlar', icon: GraduationCap },
 ]
 
-export default function Sidebar() {
+export default function Sidebar({ isAdminAuthenticated }) {
+  const items = isAdminAuthenticated
+    ? [...navigationItems, { to: ADMIN_ROUTE, label: 'Admin', icon: LockKeyhole }]
+    : navigationItems
+
   return (
     <nav className="sidebar sidebar--top">
       <div className="sidebar-brand">
@@ -25,7 +31,7 @@ export default function Sidebar() {
       </div>
 
       <div className="sidebar-nav sidebar-nav--top">
-        {navigationItems.map(({ to, label, icon: Icon }) => (
+        {items.map(({ to, label, icon: Icon }) => (
           <NavLink
             key={to}
             to={to}

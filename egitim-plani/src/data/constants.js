@@ -70,4 +70,7 @@ export const LOCAL_STORAGE_KEYS = {
   katalog: 'egitim-plani:katalog',
   talepler: 'egitim-plani:talepler',
   planlar: 'egitim-plani:planlar',
+  gmyList: 'egitim-plani:gmy-list',
 }
+
+export const ADMIN_ROUTE = '/adminakademi'

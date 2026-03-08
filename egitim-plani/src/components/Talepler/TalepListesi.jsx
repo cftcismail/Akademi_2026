@@ -6,6 +6,7 @@ import * as XLSX from 'xlsx'
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
 import EmptyState from '../ui/EmptyState'
+import Modal from '../ui/Modal'
 import PlanEkleModal from '../EgitimPlani/PlanEkleModal'
 import { getEmployeeRoute } from '../../utils/helpers'
 import TalepDetay from './TalepDetay'
@@ -89,7 +90,46 @@ function mapExcelRowsToTalepler(rows) {
   })
 }
 
-export default function TaleplerPage({ katalog, talepler, planlar, addTalep, importTalepler, planTalep }) {
+function ValidationIssuesModal({ issues, open, onOpenChange }) {
+  return (
+    <Modal
+      open={open}
+      onOpenChange={onOpenChange}
+      title="Uyarılı Satırlar"
+      description="Eklenmeyen veya atlanan kayıtlar aşağıda listelenir."
+      maxWidth={920}
+    >
+      <div className="table-wrapper">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th>Kaynak</th>
+              <th>Çalışan</th>
+              <th>Sicil</th>
+              <th>Kullanıcı Kodu</th>
+              <th>Eğitimler</th>
+              <th>Sorun</th>
+            </tr>
+          </thead>
+          <tbody>
+            {issues.map((issue, index) => (
+              <tr key={`${issue.sourceLabel}-${issue.calisanSicil}-${index}`}>
+                <td>{issue.sourceLabel}</td>
+                <td>{issue.calisanAdi || '-'}</td>
+                <td>{issue.calisanSicil || '-'}</td>
+                <td>{issue.calisanKullaniciKodu || '-'}</td>
+                <td>{issue.egitimler || '-'}</td>
+                <td>{issue.reason}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </Modal>
+  )
+}
+
+export default function TaleplerPage({ katalog, talepler, planlar, gmyList, addTalep, importTalepler, planTalep }) {
   const [showForm, setShowForm] = useState(false)
   const [selectedTalep, setSelectedTalep] = useState(null)
   const [planningTalep, setPlanningTalep] = useState(null)
@@ -213,44 +253,6 @@ export default function TaleplerPage({ katalog, talepler, planlar, addTalep, imp
         </div>
       </Card>
 
-      {validationIssues.length ? (
-        <Card className="warning-panel">
-          <div className="section-heading section-heading--tight">
-            <div>
-              <span className="eyebrow">Uyarılı Satırlar</span>
-              <h3>Eklenmeyen veya atlanan kayıtlar</h3>
-              <p>Mükerrer ya da kurala uymayan satırlar aşağıda listelenir.</p>
-            </div>
-          </div>
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Kaynak</th>
-                  <th>Çalışan</th>
-                  <th>Sicil</th>
-                  <th>Kullanıcı Kodu</th>
-                  <th>Eğitimler</th>
-                  <th>Sorun</th>
-                </tr>
-              </thead>
-              <tbody>
-                {validationIssues.map((issue, index) => (
-                  <tr key={`${issue.sourceLabel}-${issue.calisanSicil}-${index}`}>
-                    <td>{issue.sourceLabel}</td>
-                    <td>{issue.calisanAdi || '-'}</td>
-                    <td>{issue.calisanSicil || '-'}</td>
-                    <td>{issue.calisanKullaniciKodu || '-'}</td>
-                    <td>{issue.egitimler || '-'}</td>
-                    <td>{issue.reason}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </Card>
-      ) : null}
-
       {talepler.length ? (
         <Card>
           <div className="table-wrapper">
@@ -313,13 +315,29 @@ export default function TaleplerPage({ katalog, talepler, planlar, addTalep, imp
         />
       )}
 
-      <TalepForm open={showForm} onOpenChange={setShowForm} katalog={katalog} onSubmit={handleCreateTalep} />
+      <TalepForm
+        open={showForm}
+        onOpenChange={setShowForm}
+        katalog={katalog}
+        gmyList={gmyList}
+        onSubmit={handleCreateTalep}
+        onIssues={setValidationIssues}
+      />
       <TalepDetay open={Boolean(selectedTalep)} onOpenChange={() => setSelectedTalep(null)} talep={selectedTalep} />
       <PlanEkleModal
         open={Boolean(planningTalep)}
         onOpenChange={() => setPlanningTalep(null)}
         talep={planningTalep}
         onSubmit={planTalep}
+      />
+      <ValidationIssuesModal
+        issues={validationIssues}
+        open={Boolean(validationIssues.length)}
+        onOpenChange={(nextOpen) => {
+          if (!nextOpen) {
+            setValidationIssues([])
+          }
+        }}
       />
     </div>
   )

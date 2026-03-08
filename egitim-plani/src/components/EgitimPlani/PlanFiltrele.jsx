@@ -1,6 +1,6 @@
-import { AYLAR, DURUM_LISTESI, EGITIM_TURLERI, GMY_LISTESI } from '../../data/constants'
+import { AYLAR, DURUM_LISTESI, EGITIM_TURLERI } from '../../data/constants'
 
-export default function PlanFiltrele({ filters, years, onChange }) {
+export default function PlanFiltrele({ filters, years, gmyList, onChange }) {
   return (
     <div className="filter-panel">
       <label>
@@ -29,7 +29,7 @@ export default function PlanFiltrele({ filters, years, onChange }) {
         <span>GMY</span>
         <select value={filters.gmy} onChange={(event) => onChange('gmy', event.target.value)}>
           <option value="Tümü">Tümü</option>
-          {GMY_LISTESI.map((gmy) => (
+          {gmyList.map((gmy) => (
             <option key={gmy} value={gmy}>
               {gmy}
             </option>

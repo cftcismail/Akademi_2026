@@ -7,10 +7,11 @@
 - Dashboard KPI kartları ve grafikler
 - Eğitim talebi oluşturma, detay izleme ve plana dönüştürme
 - Excel ile toplu talep içeri aktarma
-- Mükerrer satırlar için uyarı listesi
+- Mükerrer satırlar için kapatılabilir popup uyarısı
 - Eğitim bazlı çalışan listesi üzerinden tekli ve toplu planlama
 - Çalışan detay görünümü
 - Yönetim raporları ve CSV dışa aktarma
+- `/adminakademi` adresinde şifre korumalı admin ekranı
 - localStorage tabanlı kalıcı tarayıcı verisi
 - Docker ile üretim yayını
 
@@ -30,6 +31,10 @@ docker compose up --build
 ```
 
 Uygulama http://localhost:8080 adresinde yayınlanır.
+
+Admin ekranı: `http://localhost:8080/adminakademi`
+
+Admin şifresi: `Akademi.123`
 
 ## Teknoloji Yığını
 
@@ -74,4 +79,5 @@ Talepler ekranındaki yükleme alanı `.xlsx`, `.xls` ve `.csv` dosyalarını ka
 - İlk açılışta örnek kayıt yüklenmez; ekranlar boş başlar.
 - Tarayıcı verisi temizlenirse kayıtlar silinir.
 - Aynı çalışan ve aynı içerik tekrar eklenirse kayıt atlanır ve uyarı listesinde gösterilir.
+- Admin ekranından GMY listesi eklenebilir, güncellenebilir ve kullanılmayan kayıtlar kaldırılabilir.
 - Çok kullanıcılı kullanım için ileride Supabase entegrasyonu eklenebilir.
