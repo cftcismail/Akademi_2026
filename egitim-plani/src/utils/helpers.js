@@ -1,6 +1,6 @@
 import { format, parseISO } from 'date-fns'
 import { tr } from 'date-fns/locale'
-import { AYLAR, BADGE_VARIANTS } from '../data/constants'
+import { AYLAR, BADGE_VARIANTS, VARSAYILAN_KURLAR } from '../data/constants'
 
 export function formatDate(value) {
   if (!value) {
@@ -18,12 +18,36 @@ export function formatDateInput(value) {
   return format(parseISO(value), 'yyyy-MM-dd')
 }
 
-export function formatCurrency(value) {
+export function formatCurrency(value, currency = 'TRY') {
   return new Intl.NumberFormat('tr-TR', {
     style: 'currency',
-    currency: 'TRY',
+    currency,
     maximumFractionDigits: 0,
   }).format(Number(value || 0))
+}
+
+export function getExchangeRate(currency, currencyRates = {}) {
+  const normalizedCurrency = `${currency || 'TRY'}`.trim().toUpperCase()
+
+  if (normalizedCurrency === 'TRY') {
+    return 1
+  }
+
+  return Number(currencyRates[normalizedCurrency] || VARSAYILAN_KURLAR[normalizedCurrency] || 1)
+}
+
+export function getPlanCostInTry(plan, currencyRates = {}) {
+  const currency = `${plan?.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase()
+  const originalCost = Number(plan?.maliyet || 0)
+  const rate = Number(plan?.dovizKuru || getExchangeRate(currency, currencyRates) || 1)
+
+  return currency === 'TRY' ? originalCost : originalCost * rate
+}
+
+export function formatPlanOriginalCost(plan) {
+  const currency = `${plan?.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase()
+  const originalCost = Number(plan?.maliyet || 0)
+  return formatCurrency(originalCost, currency)
 }
 
 export function getMonthLabel(monthNumber) {

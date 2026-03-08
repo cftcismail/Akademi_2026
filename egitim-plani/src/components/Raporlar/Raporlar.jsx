@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { toast } from 'react-hot-toast'
 import { addDays, parseISO } from 'date-fns'
+import { Download } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -13,17 +15,26 @@ import {
   YAxis,
 } from 'recharts'
 import { AYLAR } from '../../data/constants'
-import { downloadCsv, formatCurrency, formatDate, formatEgitimLabel, getUniqueYears } from '../../utils/helpers'
+import {
+  downloadCsv,
+  formatCurrency,
+  formatDate,
+  formatEgitimLabel,
+  getPlanCostInTry,
+  getUniqueYears,
+} from '../../utils/helpers'
 import Card from '../ui/Card'
+import { downloadElementAsPdf } from '../../utils/pdfExport'
 
 function formatPercent(value) {
   return `%${Math.round(value || 0)}`
 }
 
-export default function Raporlar({ planlar, talepler, gmyList }) {
+export default function Raporlar({ planlar, talepler, gmyList, kurBilgileri }) {
   const years = getUniqueYears(planlar)
   const [selectedYear, setSelectedYear] = useState(years[0])
   const [selectedGmy, setSelectedGmy] = useState('Tümü')
+  const reportRef = useRef(null)
   const activeGmy = selectedGmy === 'Tümü' || gmyList.includes(selectedGmy) ? selectedGmy : 'Tümü'
   const futureThreshold = addDays(new Date(), 60)
 
@@ -38,7 +49,7 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
   )
 
   const totalPlan = currentYearPlans.length
-  const totalBudget = currentYearPlans.reduce((total, plan) => total + Number(plan.maliyet || 0), 0)
+  const totalBudget = currentYearPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)
   const completedCount = currentYearPlans.filter((plan) => plan.durum === 'tamamlandı').length
   const conversionRate = currentYearRequests.length
     ? (currentYearRequests.filter((talep) => talep.durum === 'plana_eklendi').length / currentYearRequests.length) * 100
@@ -68,7 +79,7 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
     {
       label: 'Bütçe',
       current: formatCurrency(totalBudget),
-      previous: formatCurrency(previousYearPlans.reduce((total, plan) => total + Number(plan.maliyet || 0), 0)),
+      previous: formatCurrency(previousYearPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)),
     },
   ]
 
@@ -77,7 +88,7 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
     count: currentYearPlans.filter((plan) => plan.egitimAyi === index + 1).length,
     budget: currentYearPlans
       .filter((plan) => plan.egitimAyi === index + 1)
-      .reduce((total, plan) => total + Number(plan.maliyet || 0), 0),
+      .reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0),
   }))
 
   const gmyScorecard = gmyList
@@ -90,7 +101,7 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
         talep: requestsByGmy.length,
         plan: plansByGmy.length,
         tamamlanan: plansByGmy.filter((plan) => plan.durum === 'tamamlandı').length,
-        butce: plansByGmy.reduce((total, plan) => total + Number(plan.maliyet || 0), 0),
+        butce: plansByGmy.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0),
       }
     })
     .filter((item) => item.talep || item.plan)
@@ -133,6 +144,65 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
     .sort((left, right) => left.egitimTarihi.localeCompare(right.egitimTarihi))
     .slice(0, 8)
 
+  const trainerScorecard = Object.values(
+    currentYearPlans.reduce((accumulator, plan) => {
+      const key = `${plan.egitimci || 'Tanımsız'}`.trim() || 'Tanımsız'
+
+      if (!accumulator[key]) {
+        accumulator[key] = {
+          egitimci: key,
+          plan: 0,
+          calisan: new Set(),
+          butce: 0,
+        }
+      }
+
+      accumulator[key].plan += 1
+      accumulator[key].calisan.add(plan.calisanSicil)
+      accumulator[key].butce += getPlanCostInTry(plan, kurBilgileri)
+      return accumulator
+    }, {}),
+  )
+    .map((item) => ({ ...item, calisan: item.calisan.size }))
+    .sort((left, right) => right.plan - left.plan || right.butce - left.butce)
+    .slice(0, 10)
+
+  const categoryBudget = Object.values(
+    currentYearPlans.reduce((accumulator, plan) => {
+      if (!accumulator[plan.kategori]) {
+        accumulator[plan.kategori] = {
+          kategori: plan.kategori,
+          plan: 0,
+          butce: 0,
+        }
+      }
+
+      accumulator[plan.kategori].plan += 1
+      accumulator[plan.kategori].butce += getPlanCostInTry(plan, kurBilgileri)
+      return accumulator
+    }, {}),
+  ).sort((left, right) => right.butce - left.butce)
+
+  const currencyMix = Object.values(
+    currentYearPlans.reduce((accumulator, plan) => {
+      const currency = `${plan.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase()
+
+      if (!accumulator[currency]) {
+        accumulator[currency] = {
+          paraBirimi: currency,
+          plan: 0,
+          toplam: 0,
+          toplamTl: 0,
+        }
+      }
+
+      accumulator[currency].plan += 1
+      accumulator[currency].toplam += Number(plan.maliyet || 0)
+      accumulator[currency].toplamTl += getPlanCostInTry(plan, kurBilgileri)
+      return accumulator
+    }, {}),
+  ).sort((left, right) => right.toplamTl - left.toplamTl)
+
   function handleExport() {
     downloadCsv(
       `egitim-plani-${selectedYear}.csv`,
@@ -151,13 +221,25 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
         Süre: plan.sure,
         Eğitimci: plan.egitimci,
         Durum: plan.durum,
+        'Para Birimi': plan.maliyetParaBirimi || 'TRY',
+        Kur: plan.dovizKuru || 1,
         Maliyet: plan.maliyet,
+        'TL Maliyet': getPlanCostInTry(plan, kurBilgileri),
       })),
     )
   }
 
+  async function handleDownloadPdf() {
+    try {
+      await downloadElementAsPdf(reportRef.current, `raporlar-${selectedYear}.pdf`)
+      toast.success('Rapor ekranı PDF olarak indirildi.')
+    } catch (error) {
+      toast.error(error.message || 'Rapor PDF olarak indirilemedi.')
+    }
+  }
+
   return (
-    <div className="page-stack">
+    <div ref={reportRef} className="page-stack">
       <section className="page-toolbar">
         <Card className="surface-card--accent">
           <span className="eyebrow">Yönetim Raporları</span>
@@ -189,6 +271,10 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
           <button className="button" onClick={handleExport}>
             Excel'e Aktar
           </button>
+          <button className="button button--secondary" onClick={handleDownloadPdf}>
+            <Download size={16} />
+            PDF İndir
+          </button>
         </div>
       </section>
 
@@ -212,6 +298,68 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
           <span>Toplam Bütçe</span>
           <strong>{formatCurrency(totalBudget)}</strong>
           <small>{`${totalPlan ? formatCurrency(totalBudget / totalPlan) : formatCurrency(0)} ortalama bütçe`}</small>
+        </Card>
+      </section>
+
+      <section className="dashboard-grid dashboard-grid--bottom">
+        <Card className="chart-card">
+          <div className="section-heading">
+            <div>
+              <h3>Eğitmen Skor Kartı</h3>
+              <p>Plan adedi, çalışan etkisi ve TL bütçe yükü</p>
+            </div>
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Eğitmen</th>
+                  <th>Plan</th>
+                  <th>Çalışan</th>
+                  <th>TL Bütçe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trainerScorecard.map((item) => (
+                  <tr key={item.egitimci}>
+                    <td>{item.egitimci}</td>
+                    <td>{item.plan}</td>
+                    <td>{item.calisan}</td>
+                    <td>{formatCurrency(item.butce)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card className="chart-card">
+          <div className="section-heading">
+            <div>
+              <h3>Kategori Bazlı TL Bütçe</h3>
+              <p>Hangi kategori daha yüksek bütçe baskısı yaratıyor görün</p>
+            </div>
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Kategori</th>
+                  <th>Plan</th>
+                  <th>TL Bütçe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {categoryBudget.map((item) => (
+                  <tr key={item.kategori}>
+                    <td>{item.kategori}</td>
+                    <td>{item.plan}</td>
+                    <td>{formatCurrency(item.butce)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </Card>
       </section>
 
@@ -324,13 +472,44 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
                   </div>
                   <div className="insight-list-item__meta">
                     <strong>{formatDate(plan.egitimTarihi)}</strong>
-                    <small>{`${plan.egitimci} • ${formatCurrency(plan.maliyet)}`}</small>
+                    <small>{`${plan.egitimci} • ${formatCurrency(getPlanCostInTry(plan, kurBilgileri))}`}</small>
                   </div>
                 </div>
               ))
             ) : (
               <p>Önümüzdeki 60 gün içinde planlı eğitim görünmüyor.</p>
             )}
+          </div>
+        </Card>
+
+        <Card className="chart-card">
+          <div className="section-heading">
+            <div>
+              <h3>Para Birimi Özeti</h3>
+              <p>Orijinal para birimleri TL bazında normalize edilir</p>
+            </div>
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Para Birimi</th>
+                  <th>Plan</th>
+                  <th>Orijinal Toplam</th>
+                  <th>TL Karşılığı</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currencyMix.map((item) => (
+                  <tr key={item.paraBirimi}>
+                    <td>{item.paraBirimi}</td>
+                    <td>{item.plan}</td>
+                    <td>{formatCurrency(item.toplam, item.paraBirimi)}</td>
+                    <td>{formatCurrency(item.toplamTl)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </Card>
       </section>

@@ -410,6 +410,47 @@ p {
   gap: 14px;
 }
 
+.catalog-shell-card {
+  gap: 18px;
+}
+
+.catalog-toggle-card,
+.catalog-toggle-card__meta,
+.admin-controls-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.catalog-toggle-card {
+  width: 100%;
+  justify-content: space-between;
+  padding: 18px 20px;
+  border: 1px solid rgba(30, 58, 95, 0.12);
+  border-radius: 22px;
+  background: linear-gradient(135deg, rgba(30, 58, 95, 0.06), rgba(245, 158, 11, 0.08));
+  text-align: left;
+}
+
+.catalog-toggle-card h3 {
+  margin: 4px 0 6px;
+}
+
+.catalog-toggle-card__meta {
+  flex-shrink: 0;
+  color: var(--text-secondary);
+}
+
+.admin-controls-row {
+  flex-wrap: wrap;
+}
+
+.admin-rate-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 14px;
+}
+
 .admin-auth-form {
   width: 100%;
 }

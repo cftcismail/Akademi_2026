@@ -1,11 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { Download, FileSpreadsheet, KeyRound, LogOut, Plus, Save, ShieldCheck, Trash2, Upload } from 'lucide-react'
+import { ChevronDown, ChevronUp, Download, FileSpreadsheet, KeyRound, LogOut, Plus, Save, ShieldCheck, Trash2, Upload, Users } from 'lucide-react'
 import * as XLSX from 'xlsx'
 import Card from '../ui/Card'
 import TalepForm from '../Talepler/TalepForm'
 import Modal from '../ui/Modal'
 import { mapExcelRowsToTalepler } from '../../utils/talepImport'
+import { PARA_BIRIMLERI } from '../../data/constants'
+
+const CATALOG_PAGE_SIZE = 8
+const TRAINER_PAGE_SIZE = 10
 
 const ADMIN_PASSWORD = 'Akademi.123'
 
@@ -28,12 +32,46 @@ function buildCatalogDraftMap(katalog) {
   )
 }
 
+function buildTrainerDraftMap(egitmenListesi) {
+  return Object.fromEntries(
+    egitmenListesi.map((item) => [
+      item.id,
+      {
+        ad: item.ad || '',
+        kurum: item.kurum || '',
+        email: item.email || '',
+        uzmanlik: item.uzmanlik || '',
+      },
+    ]),
+  )
+}
+
+function getPageCount(total, pageSize) {
+  return Math.max(1, Math.ceil(total / pageSize))
+}
+
+function paginate(items, page, pageSize) {
+  const startIndex = (page - 1) * pageSize
+  return items.slice(startIndex, startIndex + pageSize)
+}
+
+function mapExcelRowsToEgitmenler(rows) {
+  return rows.map((row) => ({
+    ad: `${row.Egitimci || row.Eğitimci || row.Ad || row.Adi || row.AdSoyad || row['Ad Soyad'] || ''}`.trim(),
+    kurum: `${row.Kurum || row.Sirket || row.Şirket || ''}`.trim(),
+    email: `${row.Email || row.Eposta || row['E-Posta'] || ''}`.trim(),
+    uzmanlik: `${row.Uzmanlik || row.Uzmanlık || row.Brans || row.Brans || ''}`.trim(),
+  }))
+}
+
 export default function AdminPage({
   talepler,
   planlar,
   gmyList,
   egitimKategorileri,
   katalog,
+  egitmenListesi,
+  kurBilgileri,
   addTalep,
   importTalepler,
   addGmy,
@@ -45,6 +83,11 @@ export default function AdminPage({
   addEgitimKategorisi,
   updateEgitimKategorisi,
   deleteEgitimKategorisi,
+  addEgitmen,
+  updateEgitmen,
+  deleteEgitmen,
+  importEgitmenler,
+  updateKurBilgileri,
   clearAllPlans,
   deleteTalepYear,
   isAdminAuthenticated,
@@ -53,14 +96,24 @@ export default function AdminPage({
   const [password, setPassword] = useState('')
   const [newGmy, setNewGmy] = useState('')
   const [newKategori, setNewKategori] = useState('')
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false)
   const [catalogSearch, setCatalogSearch] = useState('')
   const [selectedCatalogCategory, setSelectedCatalogCategory] = useState('Tümü')
+  const [catalogPage, setCatalogPage] = useState(1)
   const [newCatalogItem, setNewCatalogItem] = useState({
     kod: '',
     ad: '',
     kategori: egitimKategorileri[0] || 'Teknik',
     sure: '1 gün',
     aciklama: '',
+  })
+  const [trainerSearch, setTrainerSearch] = useState('')
+  const [trainerPage, setTrainerPage] = useState(1)
+  const [newTrainer, setNewTrainer] = useState({
+    ad: '',
+    kurum: '',
+    email: '',
+    uzmanlik: '',
   })
   const [selectedTalepYear, setSelectedTalepYear] = useState(new Date().getFullYear())
   const [showTalepForm, setShowTalepForm] = useState(false)
@@ -70,8 +123,11 @@ export default function AdminPage({
   const [gmyDrafts, setGmyDrafts] = useState(() => buildDraftMap(gmyList))
   const [kategoriDrafts, setKategoriDrafts] = useState(() => buildDraftMap(egitimKategorileri))
   const [catalogDrafts, setCatalogDrafts] = useState(() => buildCatalogDraftMap(katalog))
+  const [trainerDrafts, setTrainerDrafts] = useState(() => buildTrainerDraftMap(egitmenListesi))
+  const [rateDrafts, setRateDrafts] = useState(() => ({ ...kurBilgileri }))
   const [isImporting, setIsImporting] = useState(false)
   const fileInputRef = useRef(null)
+  const trainerFileInputRef = useRef(null)
 
   useEffect(() => {
     setGmyDrafts(buildDraftMap(gmyList))
@@ -84,6 +140,14 @@ export default function AdminPage({
   useEffect(() => {
     setCatalogDrafts(buildCatalogDraftMap(katalog))
   }, [katalog])
+
+  useEffect(() => {
+    setTrainerDrafts(buildTrainerDraftMap(egitmenListesi))
+  }, [egitmenListesi])
+
+  useEffect(() => {
+    setRateDrafts({ ...kurBilgileri })
+  }, [kurBilgileri])
 
   useEffect(() => {
     if (!egitimKategorileri.length) {
@@ -149,6 +213,31 @@ export default function AdminPage({
     })
   }, [catalogSearch, katalog, selectedCatalogCategory])
 
+  const catalogPageCount = getPageCount(filteredCatalog.length, CATALOG_PAGE_SIZE)
+  const paginatedCatalog = useMemo(
+    () => paginate(filteredCatalog, Math.min(catalogPage, catalogPageCount), CATALOG_PAGE_SIZE),
+    [catalogPage, catalogPageCount, filteredCatalog],
+  )
+
+  const filteredTrainers = useMemo(() => {
+    const normalizedQuery = trainerSearch.trim().toLocaleLowerCase('tr-TR')
+
+    return egitmenListesi.filter((item) => {
+      if (!normalizedQuery) {
+        return true
+      }
+
+      return [item.ad, item.kurum, item.email, item.uzmanlik]
+        .some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
+    })
+  }, [egitmenListesi, trainerSearch])
+
+  const trainerPageCount = getPageCount(filteredTrainers.length, TRAINER_PAGE_SIZE)
+  const paginatedTrainers = useMemo(
+    () => paginate(filteredTrainers, Math.min(trainerPage, trainerPageCount), TRAINER_PAGE_SIZE),
+    [filteredTrainers, trainerPage, trainerPageCount],
+  )
+
   const talepYearSummary = useMemo(
     () =>
       Object.values(
@@ -201,6 +290,21 @@ export default function AdminPage({
       addEgitimKategorisi(newKategori)
       setNewKategori('')
       toast.success('Yeni eğitim kategorisi eklendi.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleAddTrainer() {
+    try {
+      addEgitmen(newTrainer)
+      setNewTrainer({
+        ad: '',
+        kurum: '',
+        email: '',
+        uzmanlik: '',
+      })
+      toast.success('Eğitmen listeye eklendi.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -280,6 +384,35 @@ export default function AdminPage({
     }
   }
 
+  async function handleTrainerImport(event) {
+    const file = event.target.files?.[0]
+
+    if (!file) {
+      return
+    }
+
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
+      const sheetName = workbook.SheetNames[0]
+
+      if (!sheetName) {
+        throw new Error('Excel dosyasında okunacak sayfa bulunamadı.')
+      }
+
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
+        defval: '',
+        raw: true,
+      })
+
+      const imported = importEgitmenler(mapExcelRowsToEgitmenler(rows))
+      toast.success(`${imported.length} eğitmen listeye yüklendi.`)
+    } catch (error) {
+      toast.error(error.message || 'Eğitmen listesi içeri aktarılamadı.')
+    } finally {
+      event.target.value = ''
+    }
+  }
+
   function handleRenameGmy(currentName) {
     try {
       updateGmy(currentName, gmyDrafts[currentName])
@@ -302,6 +435,15 @@ export default function AdminPage({
     try {
       updateKatalogItem(itemId, catalogDrafts[itemId])
       toast.success('Katalog kaydı güncellendi.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleSaveTrainer(itemId) {
+    try {
+      updateEgitmen(itemId, trainerDrafts[itemId])
+      toast.success('Eğitmen kaydı güncellendi.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -334,6 +476,20 @@ export default function AdminPage({
     }
   }
 
+  function handleDeleteTrainer(itemId) {
+    try {
+      deleteEgitmen(itemId)
+      toast.success('Eğitmen kaydı kaldırıldı.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleSaveRates() {
+    updateKurBilgileri(rateDrafts)
+    toast.success('Kur bilgileri güncellendi.')
+  }
+
   function handleIssuesModal(nextOpen) {
     if (!nextOpen) {
       setValidationIssues([])
@@ -364,6 +520,14 @@ export default function AdminPage({
 
     toast.success(`${deletedYear} yılına ait ${result.removedTalepCount} talep ve ${result.removedPlanCount} plan silindi.`)
   }
+
+  useEffect(() => {
+    setCatalogPage(1)
+  }, [catalogSearch, selectedCatalogCategory])
+
+  useEffect(() => {
+    setTrainerPage(1)
+  }, [trainerSearch])
 
   if (!isAdminAuthenticated) {
     return (
@@ -415,6 +579,10 @@ export default function AdminPage({
           <Card className="mini-stat">
             <span>Toplam Plan</span>
             <strong>{planlar.length}</strong>
+          </Card>
+          <Card className="mini-stat">
+            <span>Eğitmen Havuzu</span>
+            <strong>{egitmenListesi.length}</strong>
           </Card>
           <button
             className="button button--ghost"
@@ -479,139 +647,68 @@ export default function AdminPage({
         </div>
       </Card>
 
-      <Card>
-        <div className="section-heading section-heading--tight">
+      <Card className="catalog-shell-card">
+        <button className="catalog-toggle-card" onClick={() => setIsCatalogOpen((current) => !current)}>
           <div>
-            <h3>Katalog yönetimi</h3>
-            <p>Eğitim kodu, adı, kategori ve süre bilgilerini admin ekranından yönetin.</p>
+            <span className="eyebrow">Katalog Yönetimi</span>
+            <h3>{`${katalog.length} eğitim kaydı yönetiliyor`}</h3>
+            <p>{`${filteredCatalog.length} kayıt filtreye uyuyor. Büyük kataloglarda bu alanı açıp detay yönetin.`}</p>
           </div>
-        </div>
-        <div className="filter-row">
-          <label>
-            <span>Katalog Ara</span>
-            <input
-              value={catalogSearch}
-              onChange={(event) => setCatalogSearch(event.target.value)}
-              placeholder="Kod, eğitim adı veya açıklama ile ara"
-            />
-          </label>
-          <label>
-            <span>Kategori Filtresi</span>
-            <select
-              value={selectedCatalogCategory}
-              onChange={(event) => setSelectedCatalogCategory(event.target.value)}
-            >
-              <option value="Tümü">Tümü</option>
-              {egitimKategorileri.map((kategori) => (
-                <option key={kategori} value={kategori}>
-                  {kategori}
-                </option>
-              ))}
-            </select>
-          </label>
-        </div>
-        <div className="form-grid">
-          <label>
-            <span>Eğitim Kodu</span>
-            <input
-              value={newCatalogItem.kod}
-              onChange={(event) => setNewCatalogItem((current) => ({ ...current, kod: event.target.value.toUpperCase() }))}
-              placeholder="Örn. TE_001"
-            />
-          </label>
-          <label>
-            <span>Eğitim Adı</span>
-            <input
-              value={newCatalogItem.ad}
-              onChange={(event) => setNewCatalogItem((current) => ({ ...current, ad: event.target.value }))}
-              placeholder="Örn. Temel Network"
-            />
-          </label>
-          <label>
-            <span>Kategori</span>
-            <select
-              value={newCatalogItem.kategori}
-              onChange={(event) => setNewCatalogItem((current) => ({ ...current, kategori: event.target.value }))}
-            >
-              {egitimKategorileri.map((kategori) => (
-                <option key={kategori} value={kategori}>
-                  {kategori}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label>
-            <span>Süre</span>
-            <input
-              value={newCatalogItem.sure}
-              onChange={(event) => setNewCatalogItem((current) => ({ ...current, sure: event.target.value }))}
-              placeholder="Örn. 2 gün"
-            />
-          </label>
-          <label className="form-grid--full">
-            <span>Açıklama</span>
-            <textarea
-              rows={3}
-              value={newCatalogItem.aciklama}
-              onChange={(event) => setNewCatalogItem((current) => ({ ...current, aciklama: event.target.value }))}
-              placeholder="Opsiyonel katalog açıklaması"
-            />
-          </label>
-        </div>
-        <div className="admin-gmy-card__actions">
-          <button className="button" onClick={handleAddCatalogItem}>
-            <Plus size={16} />
-            Kataloğa Ekle
-          </button>
-        </div>
-        <div className="section-heading section-heading--tight">
-          <div>
-            <h3>Katalog Listesi</h3>
-            <p>{`${filteredCatalog.length} kayıt görüntüleniyor`}</p>
+          <div className="catalog-toggle-card__meta">
+            <strong>{`${egitimKategorileri.length} kategori`}</strong>
+            <span>{isCatalogOpen ? 'Kapat' : 'Aç'}</span>
+            {isCatalogOpen ? <ChevronUp size={18} /> : <ChevronDown size={18} />}
           </div>
-        </div>
-        <div className="admin-grid">
-          {filteredCatalog.map((item) => (
-            <Card key={item.id} className="admin-gmy-card">
-              <div className="admin-gmy-card__meta">
-                <span className="eyebrow">Katalog</span>
-                <strong>{`${item.kod ? `${item.kod} • ` : ''}${item.ad}`}</strong>
-                <small>{`${usageByCatalog[item.id]?.talep || 0} talep • ${usageByCatalog[item.id]?.plan || 0} plan`}</small>
-              </div>
+        </button>
+
+        {isCatalogOpen ? (
+          <div className="page-stack">
+            <div className="filter-row">
+              <label>
+                <span>Katalog Ara</span>
+                <input
+                  value={catalogSearch}
+                  onChange={(event) => setCatalogSearch(event.target.value)}
+                  placeholder="Kod, eğitim adı veya açıklama ile ara"
+                />
+              </label>
+              <label>
+                <span>Kategori Filtresi</span>
+                <select
+                  value={selectedCatalogCategory}
+                  onChange={(event) => setSelectedCatalogCategory(event.target.value)}
+                >
+                  <option value="Tümü">Tümü</option>
+                  {egitimKategorileri.map((kategori) => (
+                    <option key={kategori} value={kategori}>
+                      {kategori}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="form-grid">
               <label>
                 <span>Eğitim Kodu</span>
                 <input
-                  value={catalogDrafts[item.id]?.kod || ''}
-                  onChange={(event) =>
-                    setCatalogDrafts((current) => ({
-                      ...current,
-                      [item.id]: { ...current[item.id], kod: event.target.value.toUpperCase() },
-                    }))
-                  }
+                  value={newCatalogItem.kod}
+                  onChange={(event) => setNewCatalogItem((current) => ({ ...current, kod: event.target.value.toUpperCase() }))}
+                  placeholder="Örn. TE_001"
                 />
               </label>
               <label>
                 <span>Eğitim Adı</span>
                 <input
-                  value={catalogDrafts[item.id]?.ad || ''}
-                  onChange={(event) =>
-                    setCatalogDrafts((current) => ({
-                      ...current,
-                      [item.id]: { ...current[item.id], ad: event.target.value },
-                    }))
-                  }
+                  value={newCatalogItem.ad}
+                  onChange={(event) => setNewCatalogItem((current) => ({ ...current, ad: event.target.value }))}
+                  placeholder="Örn. Temel Network"
                 />
               </label>
               <label>
                 <span>Kategori</span>
                 <select
-                  value={catalogDrafts[item.id]?.kategori || egitimKategorileri[0] || 'Teknik'}
-                  onChange={(event) =>
-                    setCatalogDrafts((current) => ({
-                      ...current,
-                      [item.id]: { ...current[item.id], kategori: event.target.value },
-                    }))
-                  }
+                  value={newCatalogItem.kategori}
+                  onChange={(event) => setNewCatalogItem((current) => ({ ...current, kategori: event.target.value }))}
                 >
                   {egitimKategorileri.map((kategori) => (
                     <option key={kategori} value={kategori}>
@@ -623,42 +720,276 @@ export default function AdminPage({
               <label>
                 <span>Süre</span>
                 <input
-                  value={catalogDrafts[item.id]?.sure || ''}
-                  onChange={(event) =>
-                    setCatalogDrafts((current) => ({
-                      ...current,
-                      [item.id]: { ...current[item.id], sure: event.target.value },
-                    }))
-                  }
+                  value={newCatalogItem.sure}
+                  onChange={(event) => setNewCatalogItem((current) => ({ ...current, sure: event.target.value }))}
+                  placeholder="Örn. 2 gün"
                 />
               </label>
-              <label>
+              <label className="form-grid--full">
                 <span>Açıklama</span>
                 <textarea
                   rows={3}
-                  value={catalogDrafts[item.id]?.aciklama || ''}
+                  value={newCatalogItem.aciklama}
+                  onChange={(event) => setNewCatalogItem((current) => ({ ...current, aciklama: event.target.value }))}
+                  placeholder="Opsiyonel katalog açıklaması"
+                />
+              </label>
+            </div>
+            <div className="admin-gmy-card__actions">
+              <button className="button" onClick={handleAddCatalogItem}>
+                <Plus size={16} />
+                Kataloğa Ekle
+              </button>
+            </div>
+            <div className="section-heading section-heading--tight">
+              <div>
+                <h3>Katalog Listesi</h3>
+                <p>{`${filteredCatalog.length} kayıt görüntüleniyor`}</p>
+              </div>
+            </div>
+            <div className="admin-grid">
+              {paginatedCatalog.map((item) => (
+                <Card key={item.id} className="admin-gmy-card">
+                  <div className="admin-gmy-card__meta">
+                    <span className="eyebrow">Katalog</span>
+                    <strong>{`${item.kod ? `${item.kod} • ` : ''}${item.ad}`}</strong>
+                    <small>{`${usageByCatalog[item.id]?.talep || 0} talep • ${usageByCatalog[item.id]?.plan || 0} plan`}</small>
+                  </div>
+                  <label>
+                    <span>Eğitim Kodu</span>
+                    <input
+                      value={catalogDrafts[item.id]?.kod || ''}
+                      onChange={(event) =>
+                        setCatalogDrafts((current) => ({
+                          ...current,
+                          [item.id]: { ...current[item.id], kod: event.target.value.toUpperCase() },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Eğitim Adı</span>
+                    <input
+                      value={catalogDrafts[item.id]?.ad || ''}
+                      onChange={(event) =>
+                        setCatalogDrafts((current) => ({
+                          ...current,
+                          [item.id]: { ...current[item.id], ad: event.target.value },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Kategori</span>
+                    <select
+                      value={catalogDrafts[item.id]?.kategori || egitimKategorileri[0] || 'Teknik'}
+                      onChange={(event) =>
+                        setCatalogDrafts((current) => ({
+                          ...current,
+                          [item.id]: { ...current[item.id], kategori: event.target.value },
+                        }))
+                      }
+                    >
+                      {egitimKategorileri.map((kategori) => (
+                        <option key={kategori} value={kategori}>
+                          {kategori}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>Süre</span>
+                    <input
+                      value={catalogDrafts[item.id]?.sure || ''}
+                      onChange={(event) =>
+                        setCatalogDrafts((current) => ({
+                          ...current,
+                          [item.id]: { ...current[item.id], sure: event.target.value },
+                        }))
+                      }
+                    />
+                  </label>
+                  <label>
+                    <span>Açıklama</span>
+                    <textarea
+                      rows={3}
+                      value={catalogDrafts[item.id]?.aciklama || ''}
+                      onChange={(event) =>
+                        setCatalogDrafts((current) => ({
+                          ...current,
+                          [item.id]: { ...current[item.id], aciklama: event.target.value },
+                        }))
+                      }
+                    />
+                  </label>
+                  <div className="admin-gmy-card__actions">
+                    <button className="button" onClick={() => handleSaveCatalogItem(item.id)}>
+                      <Save size={16} />
+                      Kaydet
+                    </button>
+                    <button className="button button--ghost" onClick={() => handleDeleteCatalogItem(item.id)}>
+                      <Trash2 size={16} />
+                      Sil
+                    </button>
+                  </div>
+                </Card>
+              ))}
+            </div>
+            <div className="pagination-bar">
+              <button className="button button--secondary" disabled={catalogPage <= 1} onClick={() => setCatalogPage((page) => Math.max(1, page - 1))}>
+                Önceki
+              </button>
+              <span>{`Sayfa ${Math.min(catalogPage, catalogPageCount)} / ${catalogPageCount}`}</span>
+              <button className="button button--secondary" disabled={catalogPage >= catalogPageCount} onClick={() => setCatalogPage((page) => Math.min(catalogPageCount, page + 1))}>
+                Sonraki
+              </button>
+            </div>
+          </div>
+        ) : null}
+      </Card>
+
+      <section className="dashboard-grid dashboard-grid--bottom">
+        <Card>
+          <div className="section-heading section-heading--tight">
+            <div>
+              <h3>Eğitmen Yönetimi</h3>
+              <p>Listeyi yükleyin, arayın ve kullanıcıların bulamadığı eğitmenleri elle ekleyin.</p>
+            </div>
+            <div className="admin-controls-row">
+              <button className="button button--secondary" onClick={() => trainerFileInputRef.current?.click()}>
+                <Upload size={16} />
+                Eğitmen Listesi Yükle
+              </button>
+              <input
+                ref={trainerFileInputRef}
+                className="sr-only"
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={handleTrainerImport}
+              />
+            </div>
+          </div>
+
+          <div className="filter-row">
+            <label>
+              <span>Eğitmen Ara</span>
+              <input
+                value={trainerSearch}
+                onChange={(event) => setTrainerSearch(event.target.value)}
+                placeholder="Ad, kurum, e-posta veya uzmanlık ile ara"
+              />
+            </label>
+          </div>
+
+          <div className="form-grid">
+            <label>
+              <span>Eğitmen Adı</span>
+              <input value={newTrainer.ad} onChange={(event) => setNewTrainer((current) => ({ ...current, ad: event.target.value }))} placeholder="Örn. Ahmet Kaya" />
+            </label>
+            <label>
+              <span>Kurum</span>
+              <input value={newTrainer.kurum} onChange={(event) => setNewTrainer((current) => ({ ...current, kurum: event.target.value }))} placeholder="Örn. ABC Akademi" />
+            </label>
+            <label>
+              <span>E-posta</span>
+              <input value={newTrainer.email} onChange={(event) => setNewTrainer((current) => ({ ...current, email: event.target.value }))} placeholder="ornek@firma.com" />
+            </label>
+            <label>
+              <span>Uzmanlık</span>
+              <input value={newTrainer.uzmanlik} onChange={(event) => setNewTrainer((current) => ({ ...current, uzmanlik: event.target.value }))} placeholder="Örn. Liderlik" />
+            </label>
+          </div>
+          <div className="admin-gmy-card__actions">
+            <button className="button" onClick={handleAddTrainer}>
+              <Plus size={16} />
+              Eğitmen Ekle
+            </button>
+          </div>
+
+          <div className="admin-grid">
+            {paginatedTrainers.map((trainer) => (
+              <Card key={trainer.id} className="admin-gmy-card">
+                <div className="admin-gmy-card__meta">
+                  <span className="eyebrow">Eğitmen</span>
+                  <strong>{trainer.ad}</strong>
+                  <small>{trainer.kurum || trainer.uzmanlik || 'Ek bilgi yok'}</small>
+                </div>
+                <label>
+                  <span>Ad</span>
+                  <input value={trainerDrafts[trainer.id]?.ad || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], ad: event.target.value } }))} />
+                </label>
+                <label>
+                  <span>Kurum</span>
+                  <input value={trainerDrafts[trainer.id]?.kurum || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], kurum: event.target.value } }))} />
+                </label>
+                <label>
+                  <span>E-posta</span>
+                  <input value={trainerDrafts[trainer.id]?.email || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], email: event.target.value } }))} />
+                </label>
+                <label>
+                  <span>Uzmanlık</span>
+                  <input value={trainerDrafts[trainer.id]?.uzmanlik || ''} onChange={(event) => setTrainerDrafts((current) => ({ ...current, [trainer.id]: { ...current[trainer.id], uzmanlik: event.target.value } }))} />
+                </label>
+                <div className="admin-gmy-card__actions">
+                  <button className="button" onClick={() => handleSaveTrainer(trainer.id)}>
+                    <Save size={16} />
+                    Kaydet
+                  </button>
+                  <button className="button button--ghost" onClick={() => handleDeleteTrainer(trainer.id)}>
+                    <Trash2 size={16} />
+                    Sil
+                  </button>
+                </div>
+              </Card>
+            ))}
+          </div>
+
+          <div className="pagination-bar">
+            <button className="button button--secondary" disabled={trainerPage <= 1} onClick={() => setTrainerPage((page) => Math.max(1, page - 1))}>
+              Önceki
+            </button>
+            <span>{`Sayfa ${Math.min(trainerPage, trainerPageCount)} / ${trainerPageCount}`}</span>
+            <button className="button button--secondary" disabled={trainerPage >= trainerPageCount} onClick={() => setTrainerPage((page) => Math.min(trainerPageCount, page + 1))}>
+              Sonraki
+            </button>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="section-heading section-heading--tight">
+            <div>
+              <h3>Kur Yönetimi</h3>
+              <p>Maliyet girişlerinde kullanılacak para birimi kurlarını buradan güncelleyin.</p>
+            </div>
+          </div>
+          <div className="admin-rate-grid">
+            {PARA_BIRIMLERI.map((currency) => (
+              <label key={currency}>
+                <span>{currency}</span>
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={rateDrafts[currency] ?? ''}
+                  disabled={currency === 'TRY'}
                   onChange={(event) =>
-                    setCatalogDrafts((current) => ({
+                    setRateDrafts((current) => ({
                       ...current,
-                      [item.id]: { ...current[item.id], aciklama: event.target.value },
+                      [currency]: currency === 'TRY' ? 1 : Number(event.target.value),
                     }))
                   }
                 />
               </label>
-              <div className="admin-gmy-card__actions">
-                <button className="button" onClick={() => handleSaveCatalogItem(item.id)}>
-                  <Save size={16} />
-                  Kaydet
-                </button>
-                <button className="button button--ghost" onClick={() => handleDeleteCatalogItem(item.id)}>
-                  <Trash2 size={16} />
-                  Sil
-                </button>
-              </div>
-            </Card>
-          ))}
-        </div>
-      </Card>
+            ))}
+          </div>
+          <div className="admin-gmy-card__actions">
+            <button className="button" onClick={handleSaveRates}>
+              <Save size={16} />
+              Kurları Kaydet
+            </button>
+          </div>
+        </Card>
+      </section>
 
       <Card className="import-panel">
         <div className="import-panel__content">

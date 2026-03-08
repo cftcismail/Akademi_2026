@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { Link } from 'react-router-dom'
-import { DURUM_LISTESI, EGITIM_TURLERI } from '../../data/constants'
+import { DURUM_LISTESI, EGITIM_TURLERI, PARA_BIRIMLERI } from '../../data/constants'
 import { formatDate, getEmployeeRoute } from '../../utils/helpers'
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
@@ -18,6 +18,8 @@ function createPlanningDraft() {
     sure: '1 gün',
     egitimci: 'İç Eğitim',
     maliyet: 0,
+    maliyetParaBirimi: 'TRY',
+    dovizKuru: 1,
     durum: DURUM_LISTESI[0],
     notlar: '',
   }
@@ -97,8 +99,19 @@ function paginate(items, page, pageSize) {
   return items.slice(startIndex, startIndex + pageSize)
 }
 
-function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, onSaveBatch }) {
+function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, onSaveBatch, egitmenListesi, kurBilgileri }) {
   const [draft, setDraft] = useState(createPlanningDraft())
+
+  useEffect(() => {
+    if (!open) {
+      return
+    }
+
+    setDraft((current) => ({
+      ...current,
+      dovizKuru: current.maliyetParaBirimi === 'TRY' ? 1 : Number(kurBilgileri?.[current.maliyetParaBirimi] || current.dovizKuru || 1),
+    }))
+  }, [kurBilgileri, open])
 
   if (!requestRows.length) {
     return null
@@ -115,6 +128,8 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
       sure: draft.sure,
       egitimci: draft.egitimci,
       maliyet: draft.maliyet,
+      maliyetParaBirimi: draft.maliyetParaBirimi,
+      dovizKuru: draft.maliyetParaBirimi === 'TRY' ? 1 : Number(draft.dovizKuru || 1),
       durum: draft.durum,
       notlar: draft.notlar,
     }
@@ -217,7 +232,21 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
         </label>
         <label>
           <span>Eğitimci</span>
-          <input value={draft.egitimci} onChange={(event) => setDraft({ ...draft, egitimci: event.target.value })} />
+          <>
+            <input
+              list="egitmen-listesi"
+              value={draft.egitimci}
+              onChange={(event) => setDraft({ ...draft, egitimci: event.target.value })}
+              placeholder="Eğitmen seçin veya yazın"
+            />
+            <datalist id="egitmen-listesi">
+              {egitmenListesi.map((trainer) => (
+                <option key={trainer.id} value={trainer.ad}>
+                  {trainer.kurum || trainer.uzmanlik || trainer.email}
+                </option>
+              ))}
+            </datalist>
+          </>
         </label>
         <label>
           <span>Durum</span>
@@ -233,6 +262,36 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
           <span>Maliyet</span>
           <input type="number" min="0" value={draft.maliyet} onChange={(event) => setDraft({ ...draft, maliyet: Number(event.target.value) })} />
         </label>
+        <label>
+          <span>Para Birimi</span>
+          <select
+            value={draft.maliyetParaBirimi}
+            onChange={(event) =>
+              setDraft((current) => ({
+                ...current,
+                maliyetParaBirimi: event.target.value,
+                dovizKuru: event.target.value === 'TRY' ? 1 : Number(kurBilgileri?.[event.target.value] || current.dovizKuru || 1),
+              }))
+            }
+          >
+            {PARA_BIRIMLERI.map((currency) => (
+              <option key={currency} value={currency}>
+                {currency}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label>
+          <span>Kur</span>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={draft.dovizKuru}
+            disabled={draft.maliyetParaBirimi === 'TRY'}
+            onChange={(event) => setDraft({ ...draft, dovizKuru: Number(event.target.value) })}
+          />
+        </label>
         <label className="form-grid--full">
           <span>Notlar</span>
           <textarea rows={4} value={draft.notlar} onChange={(event) => setDraft({ ...draft, notlar: event.target.value })} />
@@ -242,7 +301,7 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
   )
 }
 
-export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTalepler }) {
+export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTalepler, egitmenListesi, kurBilgileri }) {
   const activeTalepYili = Math.max(...talepler.map((talep) => Number(talep.talepYili || new Date().getFullYear())), new Date().getFullYear())
   const activeTalepler = talepler.filter((talep) => Number(talep.talepYili || new Date().getFullYear()) === activeTalepYili)
 
@@ -813,6 +872,8 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
             onOpenChange={closePlanner}
             onSaveSingle={planTalep}
             onSaveBatch={planTalepler}
+            egitmenListesi={egitmenListesi}
+            kurBilgileri={kurBilgileri}
           />
         </>
       )}

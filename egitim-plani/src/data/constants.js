@@ -19,6 +19,25 @@ export const EGITIM_KATEGORILERI = [
 
 export const EGITIM_TURLERI = ['Yıllık Plan', 'Yıllık Plan Dışı']
 
+export const PARA_BIRIMLERI = ['TRY', 'USD', 'EUR', 'GBP']
+
+export const VARSAYILAN_KURLAR = {
+  TRY: 1,
+  USD: 38,
+  EUR: 41,
+  GBP: 48,
+}
+
+export const VARSAYILAN_EGITMENLER = [
+  {
+    id: 'trainer-ic-egitim',
+    ad: 'İç Eğitim',
+    kurum: 'Şirket İçi',
+    email: '',
+    uzmanlik: 'Genel Eğitim',
+  },
+]
+
 export const DURUM_LISTESI = [
   'planlandı',
   'tamamlandı',
@@ -73,6 +92,8 @@ export const LOCAL_STORAGE_KEYS = {
   planlar: 'egitim-plani:planlar',
   gmyList: 'egitim-plani:gmy-list',
   egitimKategorileri: 'egitim-plani:egitim-kategorileri',
+  egitmenListesi: 'egitim-plani:egitmen-listesi',
+  kurBilgileri: 'egitim-plani:kur-bilgileri',
 }
 
 export const ADMIN_ROUTE = '/adminakademi'

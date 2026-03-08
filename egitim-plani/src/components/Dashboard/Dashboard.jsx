@@ -1,5 +1,7 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
+import { toast } from 'react-hot-toast'
 import { addDays, differenceInCalendarDays, parseISO } from 'date-fns'
+import { Download } from 'lucide-react'
 import {
   Bar,
   BarChart,
@@ -10,7 +12,14 @@ import {
   YAxis,
 } from 'recharts'
 import { AYLAR, DURUM_LISTESI, KPI_KARTLARI } from '../../data/constants'
-import { formatCurrency, formatDate, formatEgitimLabel, getUniqueYears } from '../../utils/helpers'
+import {
+  formatCurrency,
+  formatDate,
+  formatEgitimLabel,
+  getPlanCostInTry,
+  getUniqueYears,
+} from '../../utils/helpers'
+import { downloadElementAsPdf } from '../../utils/pdfExport'
 import Card from '../ui/Card'
 import AylikPlanChart from './AylikPlanChart'
 import EgitimDurumChart from './EgitimDurumChart'
@@ -22,10 +31,11 @@ function formatPercent(value) {
   return `%${Math.round(value || 0)}`
 }
 
-export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
+export default function Dashboard({ planlar, talepler, gmyList, katalog, kurBilgileri }) {
   const years = getUniqueYears(planlar)
   const [selectedYear, setSelectedYear] = useState(years[0])
   const [selectedGmy, setSelectedGmy] = useState('Tümü')
+  const dashboardRef = useRef(null)
   const activeGmy = selectedGmy === 'Tümü' || gmyList.includes(selectedGmy) ? selectedGmy : 'Tümü'
   const today = new Date()
   const nextThirtyDays = addDays(today, 30)
@@ -65,9 +75,19 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
   const conversionRate = filteredTalepler.length ? (plannedRequestCount / filteredTalepler.length) * 100 : 0
   const completionCount = filteredPlans.filter((plan) => plan.durum === 'tamamlandı').length
   const completionRate = filteredPlans.length ? (completionCount / filteredPlans.length) * 100 : 0
-  const totalBudget = filteredPlans.reduce((total, plan) => total + Number(plan.maliyet || 0), 0)
+  const totalBudget = filteredPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)
   const averageBudget = filteredPlans.length ? totalBudget / filteredPlans.length : 0
-  const previousBudget = previousYearPlans.reduce((total, plan) => total + Number(plan.maliyet || 0), 0)
+  const previousBudget = previousYearPlans.reduce((total, plan) => total + getPlanCostInTry(plan, kurBilgileri), 0)
+  const averageLeadTime = filteredPlans.length
+    ? filteredPlans.reduce((total, plan) => {
+        if (!plan.planlanmaTarihi || !plan.egitimTarihi) {
+          return total
+        }
+
+        return total + Math.max(differenceInCalendarDays(parseISO(plan.egitimTarihi), parseISO(plan.planlanmaTarihi)), 0)
+      }, 0) / filteredPlans.length
+    : 0
+  const planDisiRate = filteredPlans.length ? (stats.planDisi / filteredPlans.length) * 100 : 0
 
   const operationsPulse = [
     {
@@ -106,6 +126,16 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
       label: 'Katalog Kapsamı',
       value: filteredCatalogCount,
       meta: `${katalog.length} kayıtlı eğitim içinde`,
+    },
+    {
+      label: 'Ortalama Planlama Süresi',
+      value: `${Math.round(averageLeadTime)} gün`,
+      meta: 'Planlama tarihi ile eğitim tarihi arası',
+    },
+    {
+      label: 'Plan Dışı Oran',
+      value: formatPercent(planDisiRate),
+      meta: `${stats.planDisi} plan dışı eğitim`,
     },
   ]
 
@@ -250,6 +280,61 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
     .filter((plan) => plan.durum === 'ertelendi' || plan.durum === 'iptal edildi')
     .slice(0, 6)
 
+  const trainerLoad = Object.values(
+    filteredPlans.reduce((accumulator, plan) => {
+      const key = `${plan.egitimci || 'Tanımsız'}`.trim() || 'Tanımsız'
+
+      if (!accumulator[key]) {
+        accumulator[key] = {
+          egitimci: key,
+          plan: 0,
+          calisan: new Set(),
+          butce: 0,
+        }
+      }
+
+      accumulator[key].plan += 1
+      accumulator[key].calisan.add(plan.calisanSicil)
+      accumulator[key].butce += getPlanCostInTry(plan, kurBilgileri)
+      return accumulator
+    }, {}),
+  )
+    .map((item) => ({
+      ...item,
+      calisan: item.calisan.size,
+    }))
+    .sort((left, right) => right.plan - left.plan || right.butce - left.butce)
+    .slice(0, 8)
+
+  const currencyMix = Object.values(
+    filteredPlans.reduce((accumulator, plan) => {
+      const currency = `${plan.maliyetParaBirimi || 'TRY'}`.trim().toUpperCase()
+
+      if (!accumulator[currency]) {
+        accumulator[currency] = {
+          paraBirimi: currency,
+          plan: 0,
+          toplam: 0,
+          toplamTl: 0,
+        }
+      }
+
+      accumulator[currency].plan += 1
+      accumulator[currency].toplam += Number(plan.maliyet || 0)
+      accumulator[currency].toplamTl += getPlanCostInTry(plan, kurBilgileri)
+      return accumulator
+    }, {}),
+  ).sort((left, right) => right.toplamTl - left.toplamTl)
+
+  async function handleDownloadPdf() {
+    try {
+      await downloadElementAsPdf(dashboardRef.current, `dashboard-${selectedYear}.pdf`)
+      toast.success('Dashboard PDF olarak indirildi.')
+    } catch (error) {
+      toast.error(error.message || 'Dashboard PDF olarak indirilemedi.')
+    }
+  }
+
   const statHints = {
     toplam: 'Seçili filtreye göre aktif plan kayıtları',
     yillikPlan: 'Yıllık plana dahil edilen eğitimler',
@@ -265,7 +350,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
   }
 
   return (
-    <div className="page-stack">
+    <div ref={dashboardRef} className="page-stack">
       <section className="hero-panel">
         <div>
           <span className="eyebrow">Yönetim Özeti</span>
@@ -297,6 +382,10 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
               ))}
             </select>
           </label>
+          <button className="button button--secondary" onClick={handleDownloadPdf}>
+            <Download size={16} />
+            PDF İndir
+          </button>
         </div>
       </section>
 
@@ -340,6 +429,70 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
       <section className="dashboard-grid dashboard-grid--bottom">
         <GMYChart data={gmyData} />
         <TopEgitimlerChart data={topEgitimler} />
+      </section>
+
+      <section className="dashboard-grid dashboard-grid--bottom">
+        <Card className="chart-card">
+          <div className="section-heading">
+            <div>
+              <h3>Eğitmen Yük Dağılımı</h3>
+              <p>En çok plan yöneten eğitmenleri ve TL bütçe yüklerini görün</p>
+            </div>
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Eğitmen</th>
+                  <th>Plan</th>
+                  <th>Çalışan</th>
+                  <th>TL Bütçe</th>
+                </tr>
+              </thead>
+              <tbody>
+                {trainerLoad.map((item) => (
+                  <tr key={item.egitimci}>
+                    <td>{item.egitimci}</td>
+                    <td>{item.plan}</td>
+                    <td>{item.calisan}</td>
+                    <td>{formatCurrency(item.butce)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+
+        <Card className="chart-card">
+          <div className="section-heading">
+            <div>
+              <h3>Para Birimi Dağılımı</h3>
+              <p>Orijinal maliyet ve TL karşılığı birlikte izlenir</p>
+            </div>
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Para Birimi</th>
+                  <th>Plan</th>
+                  <th>Orijinal Toplam</th>
+                  <th>TL Karşılığı</th>
+                </tr>
+              </thead>
+              <tbody>
+                {currencyMix.map((item) => (
+                  <tr key={item.paraBirimi}>
+                    <td>{item.paraBirimi}</td>
+                    <td>{item.plan}</td>
+                    <td>{formatCurrency(item.toplam, item.paraBirimi)}</td>
+                    <td>{formatCurrency(item.toplamTl)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </section>
 
       <section className="dashboard-grid dashboard-grid--bottom">
