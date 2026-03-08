@@ -37,14 +37,16 @@ function App() {
 
   return (
     <div className="app-shell app-shell--topnav">
-      <Header
-        metrics={{
-          talepSayisi: egitimData.talepler.length,
-          planSayisi: egitimData.planlar.length,
-        }}
-      />
-      <div className="app-main app-main--topnav">
+      <div className="top-chrome">
+        <Header
+          metrics={{
+            talepSayisi: egitimData.talepler.length,
+            planSayisi: egitimData.planlar.length,
+          }}
+        />
         <Sidebar isAdminAuthenticated={isAdminAuthenticated} />
+      </div>
+      <div className="app-main app-main--topnav">
         <main className="page-shell">
           <Suspense fallback={<div className="surface-card page-loading">İçerik yükleniyor...</div>}>
             <Routes>

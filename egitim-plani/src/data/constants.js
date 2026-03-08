@@ -71,6 +71,7 @@ export const LOCAL_STORAGE_KEYS = {
   talepler: 'egitim-plani:talepler',
   planlar: 'egitim-plani:planlar',
   gmyList: 'egitim-plani:gmy-list',
+  egitimKategorileri: 'egitim-plani:egitim-kategorileri',
 }
 
 export const ADMIN_ROUTE = '/adminakademi'

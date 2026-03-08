@@ -14,7 +14,7 @@ export default function TopEgitimlerChart({ data }) {
         <ResponsiveContainer width="100%" height="100%">
           <BarChart data={data}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
-            <XAxis dataKey="egitimAdi" angle={-16} textAnchor="end" height={72} />
+            <XAxis dataKey="etiket" angle={-16} textAnchor="end" height={72} />
             <YAxis allowDecimals={false} />
             <Tooltip />
             <Bar dataKey="talepSayisi" fill="#0f766e" radius={[8, 8, 0, 0]} />

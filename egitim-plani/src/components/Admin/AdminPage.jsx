@@ -17,27 +17,41 @@ export default function AdminPage({
   talepler,
   planlar,
   gmyList,
+  egitimKategorileri,
   katalog,
   addTalep,
   importTalepler,
   addGmy,
   updateGmy,
   deleteGmy,
+  addEgitimKategorisi,
+  updateEgitimKategorisi,
+  deleteEgitimKategorisi,
+  clearAllPlans,
+  deleteTalepYear,
   isAdminAuthenticated,
   onAuthenticatedChange,
 }) {
   const [password, setPassword] = useState('')
   const [newGmy, setNewGmy] = useState('')
+  const [newKategori, setNewKategori] = useState('')
   const [selectedTalepYear, setSelectedTalepYear] = useState(new Date().getFullYear())
   const [showTalepForm, setShowTalepForm] = useState(false)
   const [validationIssues, setValidationIssues] = useState([])
-  const [drafts, setDrafts] = useState(() => buildDraftMap(gmyList))
+  const [showClearPlansModal, setShowClearPlansModal] = useState(false)
+  const [yearToDelete, setYearToDelete] = useState(null)
+  const [gmyDrafts, setGmyDrafts] = useState(() => buildDraftMap(gmyList))
+  const [kategoriDrafts, setKategoriDrafts] = useState(() => buildDraftMap(egitimKategorileri))
   const [isImporting, setIsImporting] = useState(false)
   const fileInputRef = useRef(null)
 
   useEffect(() => {
-    setDrafts(buildDraftMap(gmyList))
+    setGmyDrafts(buildDraftMap(gmyList))
   }, [gmyList])
+
+  useEffect(() => {
+    setKategoriDrafts(buildDraftMap(egitimKategorileri))
+  }, [egitimKategorileri])
 
   const usageByGmy = useMemo(() => {
     return gmyList.reduce((accumulator, gmy) => {
@@ -91,6 +105,16 @@ export default function AdminPage({
       addGmy(newGmy)
       setNewGmy('')
       toast.success('Yeni GMY eklendi.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleAddKategori() {
+    try {
+      addEgitimKategorisi(newKategori)
+      setNewKategori('')
+      toast.success('Yeni eğitim kategorisi eklendi.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -156,8 +180,17 @@ export default function AdminPage({
 
   function handleRenameGmy(currentName) {
     try {
-      updateGmy(currentName, drafts[currentName])
+      updateGmy(currentName, gmyDrafts[currentName])
       toast.success('GMY güncellendi.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
+  function handleRenameKategori(currentName) {
+    try {
+      updateEgitimKategorisi(currentName, kategoriDrafts[currentName])
+      toast.success('Eğitim kategorisi güncellendi.')
     } catch (error) {
       toast.error(error.message)
     }
@@ -172,10 +205,44 @@ export default function AdminPage({
     }
   }
 
+  function handleDeleteKategori(name) {
+    try {
+      deleteEgitimKategorisi(name)
+      toast.success('Eğitim kategorisi kaldırıldı.')
+    } catch (error) {
+      toast.error(error.message)
+    }
+  }
+
   function handleIssuesModal(nextOpen) {
     if (!nextOpen) {
       setValidationIssues([])
     }
+  }
+
+  function handleClearAllPlans() {
+    const result = clearAllPlans()
+    setShowClearPlansModal(false)
+
+    if (!result.removedPlanCount) {
+      toast('Silinecek plan kaydı bulunmuyor.', { icon: '!' })
+      return
+    }
+
+    toast.success(`${result.removedPlanCount} plan ve ${result.removedTalepCount} ilişkili talep silindi.`)
+  }
+
+  function handleDeleteTalepYear() {
+    const result = deleteTalepYear(yearToDelete)
+    const deletedYear = yearToDelete
+    setYearToDelete(null)
+
+    if (!result.removedTalepCount) {
+      toast('Silinecek yıl arşivi bulunamadı.', { icon: '!' })
+      return
+    }
+
+    toast.success(`${deletedYear} yılına ait ${result.removedTalepCount} talep ve ${result.removedPlanCount} plan silindi.`)
   }
 
   if (!isAdminAuthenticated) {
@@ -225,6 +292,18 @@ export default function AdminPage({
             <span>Aktif GMY</span>
             <strong>{gmyList.length}</strong>
           </Card>
+          <Card className="mini-stat">
+            <span>Toplam Plan</span>
+            <strong>{planlar.length}</strong>
+          </Card>
+          <button
+            className="button button--ghost"
+            onClick={() => setShowClearPlansModal(true)}
+            disabled={!planlar.length}
+          >
+            <Trash2 size={16} />
+            Tüm Planları Sil
+          </button>
           <button className="button button--secondary" onClick={() => onAuthenticatedChange(false)}>
             <LogOut size={16} />
             Çıkış Yap
@@ -235,20 +314,48 @@ export default function AdminPage({
       <Card>
         <div className="section-heading section-heading--tight">
           <div>
-            <h3>Yeni GMY ekle</h3>
-            <p>Eklenen GMY anında talep formlarında ve raporlarda kullanılabilir.</p>
+            <h3>Eğitim kategorileri</h3>
+            <p>Talep formunda ve raporlarda kullanılan eğitim kategorilerini yönetin.</p>
           </div>
         </div>
         <div className="admin-add-row">
           <input
-            value={newGmy}
-            onChange={(event) => setNewGmy(event.target.value)}
-            placeholder="Örn. Pazarlama GMY"
+            value={newKategori}
+            onChange={(event) => setNewKategori(event.target.value)}
+            placeholder="Örn. Liderlik"
           />
-          <button className="button" onClick={handleAddGmy}>
+          <button className="button" onClick={handleAddKategori}>
             <Plus size={16} />
-            GMY Ekle
+            Kategori Ekle
           </button>
+        </div>
+        <div className="admin-grid">
+          {egitimKategorileri.map((kategori) => (
+            <Card key={kategori} className="admin-gmy-card">
+              <div className="admin-gmy-card__meta">
+                <span className="eyebrow">Kategori</span>
+                <strong>{kategori}</strong>
+                <small>Talep formu ve katalog kategorisi olarak kullanılır</small>
+              </div>
+              <label>
+                <span>Yeni Ad</span>
+                <input
+                  value={kategoriDrafts[kategori] || ''}
+                  onChange={(event) => setKategoriDrafts((current) => ({ ...current, [kategori]: event.target.value }))}
+                />
+              </label>
+              <div className="admin-gmy-card__actions">
+                <button className="button" onClick={() => handleRenameKategori(kategori)}>
+                  <Save size={16} />
+                  Kaydet
+                </button>
+                <button className="button button--ghost" onClick={() => handleDeleteKategori(kategori)}>
+                  <Trash2 size={16} />
+                  Sil
+                </button>
+              </div>
+            </Card>
+          ))}
         </div>
       </Card>
 
@@ -312,6 +419,7 @@ export default function AdminPage({
                 <th>Toplam Talep</th>
                 <th>Bekleyen</th>
                 <th>Planlanan</th>
+                <th>İşlem</th>
               </tr>
             </thead>
             <tbody>
@@ -321,6 +429,14 @@ export default function AdminPage({
                   <td>{item.talep}</td>
                   <td>{item.bekleyen}</td>
                   <td>{item.planlanan}</td>
+                  <td>
+                    <div className="action-row">
+                      <button className="button button--ghost" onClick={() => setYearToDelete(item.year)}>
+                        <Trash2 size={16} />
+                        Yılı Sil
+                      </button>
+                    </div>
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -329,6 +445,28 @@ export default function AdminPage({
       </Card>
 
       <div className="admin-grid">
+        <Card className="admin-gmy-card">
+          <div className="admin-gmy-card__meta">
+            <span className="eyebrow">GMY</span>
+            <strong>Yeni GMY ekle</strong>
+            <small>Eklenen GMY anında talep formları ve raporlarda kullanılabilir</small>
+          </div>
+          <label>
+            <span>GMY Adı</span>
+            <input
+              value={newGmy}
+              onChange={(event) => setNewGmy(event.target.value)}
+              placeholder="Örn. Pazarlama GMY"
+            />
+          </label>
+          <div className="admin-gmy-card__actions">
+            <button className="button" onClick={handleAddGmy}>
+              <Plus size={16} />
+              GMY Ekle
+            </button>
+          </div>
+        </Card>
+
         {gmyList.map((gmy) => (
           <Card key={gmy} className="admin-gmy-card">
             <div className="admin-gmy-card__meta">
@@ -339,8 +477,8 @@ export default function AdminPage({
             <label>
               <span>Yeni Ad</span>
               <input
-                value={drafts[gmy] || ''}
-                onChange={(event) => setDrafts((current) => ({ ...current, [gmy]: event.target.value }))}
+                value={gmyDrafts[gmy] || ''}
+                onChange={(event) => setGmyDrafts((current) => ({ ...current, [gmy]: event.target.value }))}
               />
             </label>
             <div className="admin-gmy-card__actions">
@@ -362,6 +500,7 @@ export default function AdminPage({
         onOpenChange={setShowTalepForm}
         katalog={katalog}
         gmyList={gmyList}
+        kategoriList={egitimKategorileri}
         onSubmit={handleCreateTalep}
         onIssues={setValidationIssues}
       />
@@ -399,6 +538,54 @@ export default function AdminPage({
               ))}
             </tbody>
           </table>
+        </div>
+      </Modal>
+      <Modal
+        open={showClearPlansModal}
+        onOpenChange={setShowClearPlansModal}
+        title="Tüm Planları Sil"
+        description="Bu işlem tüm plan kayıtlarını ve bu planlarla ilişkili talepleri kalıcı olarak siler."
+        footer={
+          <>
+            <button className="button button--secondary" onClick={() => setShowClearPlansModal(false)}>
+              Vazgeç
+            </button>
+            <button className="button button--ghost" onClick={handleClearAllPlans}>
+              <Trash2 size={16} />
+              Evet, Tümünü Sil
+            </button>
+          </>
+        }
+      >
+        <div className="page-stack">
+          <p>
+            Sistemdeki <strong>{planlar.length}</strong> plan kaydının tamamı ve bu planlara bağlı talepler silinecek.
+          </p>
+          <p>Bu işlem geri alınamaz.</p>
+        </div>
+      </Modal>
+      <Modal
+        open={Boolean(yearToDelete)}
+        onOpenChange={(nextOpen) => setYearToDelete(nextOpen ? yearToDelete : null)}
+        title="Talep Yılı Arşivini Sil"
+        description="Bu işlem seçilen yıla ait tüm talepleri ve bu taleplere bağlı tüm planları kalıcı olarak siler."
+        footer={
+          <>
+            <button className="button button--secondary" onClick={() => setYearToDelete(null)}>
+              Vazgeç
+            </button>
+            <button className="button button--ghost" onClick={handleDeleteTalepYear}>
+              <Trash2 size={16} />
+              Evet, Yılı Sil
+            </button>
+          </>
+        }
+      >
+        <div className="page-stack">
+          <p>
+            <strong>{yearToDelete || '-'}</strong> yılına ait tüm talepler ve bağlantılı planlar silinecek.
+          </p>
+          <p>Bu yıl sistemden tamamen kaldırılır ve işlem geri alınamaz.</p>
         </div>
       </Modal>
     </div>

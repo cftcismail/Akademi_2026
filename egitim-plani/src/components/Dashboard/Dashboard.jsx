@@ -10,7 +10,7 @@ import {
   YAxis,
 } from 'recharts'
 import { AYLAR, DURUM_LISTESI, KPI_KARTLARI } from '../../data/constants'
-import { formatCurrency, formatDate, getUniqueYears } from '../../utils/helpers'
+import { formatCurrency, formatDate, formatEgitimLabel, getUniqueYears } from '../../utils/helpers'
 import Card from '../ui/Card'
 import AylikPlanChart from './AylikPlanChart'
 import EgitimDurumChart from './EgitimDurumChart'
@@ -163,14 +163,18 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
     filteredTalepler
       .flatMap((talep) => talep.egitimler)
       .reduce((accumulator, egitim) => {
-        if (!accumulator[egitim.egitimAdi]) {
-          accumulator[egitim.egitimAdi] = {
+        const trainingKey = `${egitim.egitimKodu || ''}::${egitim.egitimAdi}`
+
+        if (!accumulator[trainingKey]) {
+          accumulator[trainingKey] = {
+            egitimKodu: egitim.egitimKodu || '',
             egitimAdi: egitim.egitimAdi,
+            etiket: formatEgitimLabel(egitim),
             talepSayisi: 0,
           }
         }
 
-        accumulator[egitim.egitimAdi].talepSayisi += 1
+        accumulator[trainingKey].talepSayisi += 1
         return accumulator
       }, {}),
   )
@@ -203,8 +207,11 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
 
   const demandCoverage = Object.values(
     filteredTalepler.flatMap((talep) => talep.egitimler).reduce((accumulator, egitim) => {
-      if (!accumulator[egitim.egitimAdi]) {
-        accumulator[egitim.egitimAdi] = {
+      const trainingKey = `${egitim.egitimKodu || ''}::${egitim.egitimAdi}`
+
+      if (!accumulator[trainingKey]) {
+        accumulator[trainingKey] = {
+          egitimKodu: egitim.egitimKodu || '',
           egitimAdi: egitim.egitimAdi,
           kategori: egitim.kategori,
           talep: 0,
@@ -212,13 +219,13 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
         }
       }
 
-      accumulator[egitim.egitimAdi].talep += 1
+      accumulator[trainingKey].talep += 1
       return accumulator
     }, {}),
   )
     .map((item) => ({
       ...item,
-      plan: filteredPlans.filter((plan) => plan.egitimAdi === item.egitimAdi).length,
+      plan: filteredPlans.filter((plan) => plan.egitimAdi === item.egitimAdi && (plan.egitimKodu || '') === (item.egitimKodu || '')).length,
     }))
     .map((item) => ({
       ...item,
@@ -377,8 +384,8 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
               </thead>
               <tbody>
                 {demandCoverage.map((item) => (
-                  <tr key={item.egitimAdi}>
-                    <td>{item.egitimAdi}</td>
+                  <tr key={`${item.egitimKodu || ''}-${item.egitimAdi}`}>
+                    <td>{formatEgitimLabel(item)}</td>
                     <td>{item.kategori}</td>
                     <td>{item.talep}</td>
                     <td>{item.plan}</td>
@@ -404,7 +411,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
               upcomingPlans.map((plan) => (
                 <div key={plan.id} className="insight-list-item">
                   <div>
-                    <strong>{plan.egitimAdi}</strong>
+                    <strong>{formatEgitimLabel(plan)}</strong>
                     <small>{`${plan.calisanAdi} • ${plan.gmy}`}</small>
                   </div>
                   <div className="insight-list-item__meta">
@@ -431,7 +438,7 @@ export default function Dashboard({ planlar, talepler, gmyList, katalog }) {
               delayedPlans.map((plan) => (
                 <div key={plan.id} className="insight-list-item insight-list-item--warning">
                   <div>
-                    <strong>{plan.egitimAdi}</strong>
+                    <strong>{formatEgitimLabel(plan)}</strong>
                     <small>{`${plan.calisanAdi} • ${plan.gmy}`}</small>
                   </div>
                   <div className="insight-list-item__meta">

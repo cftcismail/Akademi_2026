@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import { DURUM_LISTESI, EGITIM_TURLERI } from '../../data/constants'
-import { formatDate, getEmployeeRoute } from '../../utils/helpers'
+import { formatDate, formatEgitimLabel, getEmployeeRoute } from '../../utils/helpers'
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
 import EmptyState from '../ui/EmptyState'
@@ -46,7 +46,7 @@ function sortTrainingGroups(left, right) {
     return right.talepler.length - left.talepler.length
   }
 
-  return left.egitimAdi.localeCompare(right.egitimAdi, 'tr')
+  return formatEgitimLabel(left).localeCompare(formatEgitimLabel(right), 'tr')
 }
 
 function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, onSaveBatch }) {
@@ -103,7 +103,7 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={`${primaryRow.egitim.egitimAdi} planla`}
+      title={`${formatEgitimLabel(primaryRow.egitim)} planla`}
       description={
         isBulk
           ? `${requestRows.length} çalışan için toplu eğitim planı oluşturun`
@@ -124,7 +124,7 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
       <div className="detail-grid detail-grid--compact">
         <div className="detail-card">
           <span>Eğitim</span>
-          <strong>{primaryRow.egitim.egitimAdi}</strong>
+          <strong>{formatEgitimLabel(primaryRow.egitim)}</strong>
           <small>{primaryRow.egitim.kategori}</small>
         </div>
         <div className="detail-card">
@@ -200,15 +200,19 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
 
   const trainingMap = activeTalepler.reduce((accumulator, talep) => {
     talep.egitimler.forEach((egitim) => {
-      if (!accumulator[egitim.egitimAdi]) {
-        accumulator[egitim.egitimAdi] = {
+      const trainingKey = `${egitim.egitimKodu || ''}::${egitim.egitimAdi}`
+
+      if (!accumulator[trainingKey]) {
+        accumulator[trainingKey] = {
+          trainingKey,
+          egitimKodu: egitim.egitimKodu || '',
           egitimAdi: egitim.egitimAdi,
           kategori: egitim.kategori,
           talepler: [],
         }
       }
 
-      accumulator[egitim.egitimAdi].talepler.push({ talep, egitim })
+      accumulator[trainingKey].talepler.push({ talep, egitim })
     })
 
     return accumulator
@@ -217,7 +221,12 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
   const trainingGroups = Object.values(trainingMap)
     .map((group) => {
       const plannedCount = group.talepler.filter((entry) =>
-        planlar.some((plan) => plan.talepId === entry.talep.id && plan.egitimAdi === entry.egitim.egitimAdi),
+        planlar.some(
+          (plan) =>
+            plan.talepId === entry.talep.id &&
+            plan.egitimAdi === entry.egitim.egitimAdi &&
+            (plan.egitimKodu || '') === (entry.egitim.egitimKodu || ''),
+        ),
       ).length
 
       return {
@@ -229,18 +238,21 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
     })
     .sort(sortTrainingGroups)
 
-  const [selectedTrainingName, setSelectedTrainingName] = useState(trainingGroups[0]?.egitimAdi || '')
+  const [selectedTrainingName, setSelectedTrainingName] = useState(trainingGroups[0]?.trainingKey || '')
   const [selectedRequestKeys, setSelectedRequestKeys] = useState([])
   const [planningRows, setPlanningRows] = useState([])
 
-  const activeTrainingName = trainingGroups.some((item) => item.egitimAdi === selectedTrainingName)
+  const activeTrainingName = trainingGroups.some((item) => item.trainingKey === selectedTrainingName)
     ? selectedTrainingName
-    : trainingGroups[0]?.egitimAdi || ''
+    : trainingGroups[0]?.trainingKey || ''
 
-  const selectedTraining = trainingGroups.find((item) => item.egitimAdi === activeTrainingName)
+  const selectedTraining = trainingGroups.find((item) => item.trainingKey === activeTrainingName)
   const requestRows = (selectedTraining?.talepler || []).map((entry) => {
     const relatedPlan = planlar.find(
-      (plan) => plan.talepId === entry.talep.id && plan.egitimAdi === entry.egitim.egitimAdi,
+      (plan) =>
+        plan.talepId === entry.talep.id &&
+        plan.egitimAdi === entry.egitim.egitimAdi &&
+        (plan.egitimKodu || '') === (entry.egitim.egitimKodu || ''),
     )
 
     return {
@@ -309,12 +321,12 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
           <section className="training-grid">
             {trainingGroups.map((group) => (
               <button
-                key={group.egitimAdi}
-                className={`training-card ${activeTrainingName === group.egitimAdi ? 'active' : ''}`.trim()}
-                onClick={() => setSelectedTrainingName(group.egitimAdi)}
+                key={group.trainingKey}
+                className={`training-card ${activeTrainingName === group.trainingKey ? 'active' : ''}`.trim()}
+                onClick={() => setSelectedTrainingName(group.trainingKey)}
               >
                 <span>{group.kategori}</span>
-                <strong>{group.egitimAdi}</strong>
+                <strong>{formatEgitimLabel(group)}</strong>
                 <small>{`${group.pendingCount} bekleyen • ${group.plannedCount} planlandı`}</small>
                 <small className="training-card__meta">{`${group.employeeCount} çalışan • ${group.talepler.length} toplam talep`}</small>
               </button>
@@ -324,7 +336,7 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
           <section className="stats-grid stats-grid--compact">
             <Card className="mini-stat">
               <span>Seçili Eğitim</span>
-              <strong>{selectedTraining?.egitimAdi || '-'}</strong>
+              <strong>{formatEgitimLabel(selectedTraining)}</strong>
             </Card>
             <Card className="mini-stat">
               <span>Talep Eden Çalışan</span>
@@ -343,7 +355,7 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
           <Card>
             <div className="section-heading">
               <div>
-                <h3>{selectedTraining?.egitimAdi}</h3>
+                <h3>{formatEgitimLabel(selectedTraining)}</h3>
                 <p>Bu eğitim için çalışan seçin ve plan durumunu takip edin</p>
               </div>
               <div className="selection-toolbar">

@@ -1,17 +1,17 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
-import { EGITIM_KATEGORILERI } from '../../data/constants'
 import Modal from '../ui/Modal'
 
-function createBlankEgitim(index = 0) {
+function createBlankEgitim(kategoriList) {
   return {
     egitimId: '',
+    egitimKodu: '',
     egitimAdi: '',
-    kategori: EGITIM_KATEGORILERI[0],
+    kategori: kategoriList[0] || 'Teknik',
   }
 }
 
-function createInitialForm(gmyList) {
+function createInitialForm(gmyList, kategoriList) {
   return {
     talepYili: new Date().getFullYear(),
     yoneticiAdi: '',
@@ -20,19 +20,19 @@ function createInitialForm(gmyList) {
     calisanAdi: '',
     calisanSicil: '',
     calisanKullaniciKodu: '',
-    egitimler: [createBlankEgitim(0)],
+    egitimler: [createBlankEgitim(kategoriList)],
     notlar: '',
   }
 }
 
-export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubmit, onIssues }) {
-  const [form, setForm] = useState(createInitialForm(gmyList))
+export default function TalepForm({ open, onOpenChange, katalog, gmyList, kategoriList, onSubmit, onIssues }) {
+  const [form, setForm] = useState(createInitialForm(gmyList, kategoriList))
 
   useEffect(() => {
     if (!open) {
-      setForm(createInitialForm(gmyList))
+      setForm(createInitialForm(gmyList, kategoriList))
     }
-  }, [gmyList, open])
+  }, [gmyList, kategoriList, open])
 
   useEffect(() => {
     if (!gmyList.length) {
@@ -47,6 +47,24 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
     }
   }, [form.gmy, gmyList])
 
+  useEffect(() => {
+    if (!kategoriList.length) {
+      return
+    }
+
+    setForm((current) => ({
+      ...current,
+      egitimler: current.egitimler.map((egitim) =>
+        kategoriList.includes(egitim.kategori)
+          ? egitim
+          : {
+              ...egitim,
+              kategori: kategoriList[0],
+            },
+      ),
+    }))
+  }, [kategoriList])
+
   function updateEgitim(index, field, value) {
     setForm((current) => {
       const nextEgitimler = current.egitimler.map((egitim, egitimIndex) => {
@@ -60,6 +78,7 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
           return {
             ...egitim,
             egitimId: matchedCatalog.id,
+            egitimKodu: matchedCatalog.kod || '',
             egitimAdi: matchedCatalog.ad,
             kategori: matchedCatalog.kategori,
           }
@@ -189,7 +208,7 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
               type="button"
               className="button button--secondary"
               disabled={form.egitimler.length >= 4}
-              onClick={() => setForm({ ...form, egitimler: [...form.egitimler, createBlankEgitim(form.egitimler.length)] })}
+              onClick={() => setForm({ ...form, egitimler: [...form.egitimler, createBlankEgitim(kategoriList)] })}
             >
               + Eğitim Ekle
             </button>
@@ -205,6 +224,14 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
             {form.egitimler.map((egitim, index) => (
               <div key={`${egitim.egitimAdi}-${index}`} className="education-row">
               <label>
+                <span>Eğitim Kodu</span>
+                <input
+                  value={egitim.egitimKodu}
+                  onChange={(event) => updateEgitim(index, 'egitimKodu', event.target.value.toUpperCase())}
+                  placeholder="Örn. TE_001"
+                />
+              </label>
+              <label>
                 <span>Eğitim Adı</span>
                 <input
                   list="catalog-options"
@@ -216,7 +243,7 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
               <label>
                 <span>Kategori</span>
                 <select value={egitim.kategori} onChange={(event) => updateEgitim(index, 'kategori', event.target.value)}>
-                  {EGITIM_KATEGORILERI.map((kategori) => (
+                  {kategoriList.map((kategori) => (
                     <option key={kategori} value={kategori}>
                       {kategori}
                     </option>

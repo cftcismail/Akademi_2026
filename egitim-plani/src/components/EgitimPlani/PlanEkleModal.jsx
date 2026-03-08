@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { DURUM_LISTESI, EGITIM_TURLERI } from '../../data/constants'
+import { formatEgitimLabel } from '../../utils/helpers'
 import Modal from '../ui/Modal'
 
 function createInitialForm() {
@@ -117,7 +118,7 @@ export default function PlanEkleModal({ open, onOpenChange, talep, onSubmit }) {
               onChange={() => handleToggle(egitim.egitimId)}
             />
             <div>
-              <strong>{egitim.egitimAdi}</strong>
+              <strong>{formatEgitimLabel(egitim)}</strong>
               <span>{egitim.kategori}</span>
             </div>
           </label>

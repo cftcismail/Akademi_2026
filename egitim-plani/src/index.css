@@ -75,8 +75,13 @@ p {
 
 .app-shell--topnav {
   grid-template-columns: 1fr;
-  gap: 18px;
+  gap: 20px;
   padding: 24px 28px 40px;
+}
+
+.top-chrome {
+  display: grid;
+  gap: 14px;
 }
 
 .sidebar {
@@ -95,7 +100,6 @@ p {
 .sidebar-link,
 .sidebar-footer,
 .topbar,
-.topbar__intro,
 .topbar__actions,
 .topbar__meta,
 .searchbox,
@@ -105,7 +109,10 @@ p {
 .section-heading,
 .legend-item,
 .chip-list,
-.action-row,
+.action-row {
+  display: flex;
+  gap: 1rem;
+}
 
 .talep-form {
   display: flex;
@@ -123,7 +130,7 @@ p {
 .form-section h3 {
   margin: 0 0 0.9rem;
   font-size: 1rem;
-  color: var(--text-strong);
+  color: var(--text-primary);
 }
 
 .form-grid--section {
@@ -147,16 +154,16 @@ p {
 .year-chip {
   border: 1px solid rgba(30, 58, 95, 0.14);
   background: #fff;
-  color: var(--text-strong);
+  color: var(--text-primary);
   border-radius: 999px;
   padding: 0.55rem 0.95rem;
   font-weight: 600;
 }
 
 .year-chip.is-active {
-  background: var(--primary-color);
+  background: var(--primary);
   color: #fff;
-  border-color: var(--primary-color);
+  border-color: var(--primary);
 }
 
 .report-highlight-grid {
@@ -173,20 +180,20 @@ p {
 
 .comparison-card span,
 .insight-card span {
-  color: var(--text-muted);
+  color: var(--text-secondary);
   font-size: 0.9rem;
 }
 
 .comparison-card strong,
 .insight-card strong {
   font-size: 1.7rem;
-  color: var(--text-strong);
+  color: var(--text-primary);
 }
 
 .comparison-card small,
 .insight-card small,
 .insight-list-item small {
-  color: var(--text-muted);
+  color: var(--text-secondary);
 }
 
 .dashboard-rich-grid {
@@ -244,6 +251,7 @@ p {
 }
 
 .sidebar-brand {
+  align-items: center;
   gap: 14px;
 }
 
@@ -278,6 +286,7 @@ p {
 .sidebar--top {
   align-items: center;
   gap: 20px;
+  padding: 16px 22px;
 }
 
 .sidebar-nav--top {
@@ -288,6 +297,7 @@ p {
 }
 
 .sidebar-link {
+  align-items: center;
   gap: 12px;
   padding: 14px 16px;
   border-radius: 18px;
@@ -310,14 +320,21 @@ p {
 }
 
 .topbar {
+  align-items: center;
   justify-content: space-between;
   gap: 18px;
-  padding: 18px 22px;
+  padding: 20px 24px;
   border: 1px solid rgba(255, 255, 255, 0.6);
   border-radius: 28px;
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(22px);
   box-shadow: var(--shadow);
+}
+
+.topbar__intro {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
 }
 
 .topbar__intro,
@@ -330,8 +347,16 @@ p {
 }
 
 .topbar__actions {
+  align-items: center;
   justify-content: flex-end;
   flex-wrap: wrap;
+  flex: 1;
+}
+
+.topbar__meta {
+  align-items: center;
+  justify-content: flex-end;
+  white-space: nowrap;
 }
 
 .topbar h1,
@@ -346,7 +371,7 @@ p {
 }
 
 .page-shell {
-  margin-top: 24px;
+  margin-top: 0;
 }
 
 .page-stack {
@@ -1066,11 +1091,15 @@ textarea {
   .sidebar,
   .sidebar-nav--top,
   .topbar,
-  .topbar__intro,
   .topbar__actions,
   .topbar__meta {
     align-items: stretch;
     flex-direction: column;
+  }
+
+  .topbar__intro {
+    display: grid;
+    gap: 6px;
   }
 
   .app-main {

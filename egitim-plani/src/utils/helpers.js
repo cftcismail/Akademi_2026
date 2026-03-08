@@ -53,12 +53,28 @@ export function buildEgitimSignature(egitimler = []) {
   return [...egitimler]
     .filter((egitim) => egitim?.egitimAdi)
     .map((egitim) => {
+      const egitimKodu = normalizeSignatureText(egitim.egitimKodu)
       const egitimAdi = normalizeSignatureText(egitim.egitimAdi)
       const kategori = normalizeSignatureText(egitim.kategori)
-      return `${egitimAdi}::${kategori}`
+      return `${egitimKodu}::${egitimAdi}::${kategori}`
     })
     .sort((left, right) => left.localeCompare(right, 'tr'))
     .join('|')
+}
+
+export function formatEgitimLabel(egitim) {
+  if (!egitim) {
+    return '-'
+  }
+
+  const kod = `${egitim.egitimKodu || egitim.kod || ''}`.trim()
+  const ad = `${egitim.egitimAdi || egitim.ad || ''}`.trim()
+
+  if (kod && ad) {
+    return `${kod} • ${ad}`
+  }
+
+  return kod || ad || '-'
 }
 
 export function buildTalepDuplicateKey(payload) {

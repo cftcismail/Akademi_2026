@@ -13,7 +13,7 @@ import {
   YAxis,
 } from 'recharts'
 import { AYLAR } from '../../data/constants'
-import { downloadCsv, formatCurrency, formatDate, getUniqueYears } from '../../utils/helpers'
+import { downloadCsv, formatCurrency, formatDate, formatEgitimLabel, getUniqueYears } from '../../utils/helpers'
 import Card from '../ui/Card'
 
 function formatPercent(value) {
@@ -99,8 +99,11 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
     () =>
       Object.values(
         currentYearRequests.flatMap((talep) => talep.egitimler).reduce((accumulator, egitim) => {
-          if (!accumulator[egitim.egitimAdi]) {
-            accumulator[egitim.egitimAdi] = {
+          const trainingKey = `${egitim.egitimKodu || ''}::${egitim.egitimAdi}`
+
+          if (!accumulator[trainingKey]) {
+            accumulator[trainingKey] = {
+              egitimKodu: egitim.egitimKodu || '',
               egitimAdi: egitim.egitimAdi,
               kategori: egitim.kategori,
               talep: 0,
@@ -108,13 +111,13 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
             }
           }
 
-          accumulator[egitim.egitimAdi].talep += 1
+          accumulator[trainingKey].talep += 1
           return accumulator
         }, {}),
       )
         .map((item) => ({
           ...item,
-          plan: currentYearPlans.filter((plan) => plan.egitimAdi === item.egitimAdi).length,
+          plan: currentYearPlans.filter((plan) => plan.egitimAdi === item.egitimAdi && (plan.egitimKodu || '') === (item.egitimKodu || '')).length,
         }))
         .map((item) => ({
           ...item,
@@ -139,6 +142,7 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
         Sicil: plan.calisanSicil,
         'Kullanıcı Kodu': plan.calisanKullaniciKodu,
         GMY: plan.gmy,
+        'Eğitim Kodu': plan.egitimKodu,
         Eğitim: plan.egitimAdi,
         Kategori: plan.kategori,
         'Eğitim Türü': plan.egitimTuru,
@@ -290,8 +294,8 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
               </thead>
               <tbody>
                 {demandCoverage.map((item) => (
-                  <tr key={item.egitimAdi}>
-                    <td>{item.egitimAdi}</td>
+                  <tr key={`${item.egitimKodu || ''}-${item.egitimAdi}`}>
+                    <td>{formatEgitimLabel(item)}</td>
                     <td>{item.kategori}</td>
                     <td>{item.talep}</td>
                     <td>{item.plan}</td>
@@ -315,7 +319,7 @@ export default function Raporlar({ planlar, talepler, gmyList }) {
               upcomingPlans.map((plan) => (
                 <div key={plan.id} className="insight-list-item">
                   <div>
-                    <strong>{plan.egitimAdi}</strong>
+                    <strong>{formatEgitimLabel(plan)}</strong>
                     <small>{`${plan.calisanAdi} • ${plan.gmy}`}</small>
                   </div>
                   <div className="insight-list-item__meta">

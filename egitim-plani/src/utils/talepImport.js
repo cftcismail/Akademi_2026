@@ -46,7 +46,7 @@ export function mapExcelRowsToTalepler(rows) {
         return
       }
 
-      const egitimMatch = key.match(/^egitim([1-4])(adi|kategori)$/)
+      const egitimMatch = key.match(/^egitim([1-4])(adi|kategori|kodu)$/)
 
       if (!egitimMatch) {
         return
@@ -55,8 +55,13 @@ export function mapExcelRowsToTalepler(rows) {
       const egitimIndex = Number(egitimMatch[1]) - 1
       const egitimField = egitimMatch[2]
       const nextEgitim = mapped.egitimler[egitimIndex] || {
+        egitimKodu: '',
         egitimAdi: '',
         kategori: 'Teknik',
+      }
+
+      if (egitimField === 'kodu') {
+        nextEgitim.egitimKodu = `${value || ''}`.trim()
       }
 
       if (egitimField === 'adi') {

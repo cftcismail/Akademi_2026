@@ -4,7 +4,7 @@ import Badge from '../ui/Badge'
 import Card from '../ui/Card'
 import EmptyState from '../ui/EmptyState'
 import PlanEkleModal from '../EgitimPlani/PlanEkleModal'
-import { getEmployeeRoute } from '../../utils/helpers'
+import { formatEgitimLabel, getEmployeeRoute } from '../../utils/helpers'
 import TalepDetay from './TalepDetay'
 export default function TaleplerPage({ talepler, planlar, planTalep }) {
   const [selectedTalep, setSelectedTalep] = useState(null)
@@ -93,7 +93,7 @@ export default function TaleplerPage({ talepler, planlar, planTalep }) {
                       <div className="chip-list">
                         {talep.egitimler.map((egitim) => (
                           <span key={egitim.egitimId} className="chip">
-                            {egitim.egitimAdi}
+                            {formatEgitimLabel(egitim)}
                           </span>
                         ))}
                       </div>

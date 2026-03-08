@@ -1,5 +1,5 @@
 import { useParams } from 'react-router-dom'
-import { formatDate } from '../utils/helpers'
+import { formatDate, formatEgitimLabel } from '../utils/helpers'
 import Badge from './ui/Badge'
 import Card from './ui/Card'
 import EmptyState from './ui/EmptyState'
@@ -64,7 +64,7 @@ export default function CalisanDetay({ talepler, planlar }) {
             <tbody>
               {calisanPlanlari.map((plan) => (
                 <tr key={plan.id}>
-                  <td>{plan.egitimAdi}</td>
+                  <td>{formatEgitimLabel(plan)}</td>
                   <td>{formatDate(plan.egitimTarihi)}</td>
                   <td>
                     <Badge value={plan.egitimTuru} />
@@ -92,7 +92,7 @@ export default function CalisanDetay({ talepler, planlar }) {
               <span>Talep</span>
               <div>
                 <strong>Talep açıldı</strong>
-                <p>{talep.egitimler.map((egitim) => egitim.egitimAdi).join(', ')}</p>
+                <p>{talep.egitimler.map((egitim) => formatEgitimLabel(egitim)).join(', ')}</p>
               </div>
             </div>
           ))}
@@ -100,7 +100,7 @@ export default function CalisanDetay({ talepler, planlar }) {
             <div key={plan.id} className="timeline-item">
               <span>{formatDate(plan.egitimTarihi)}</span>
               <div>
-                <strong>{plan.egitimAdi}</strong>
+                <strong>{formatEgitimLabel(plan)}</strong>
                 <p>{`${plan.egitimTuru} • ${plan.durum}`}</p>
               </div>
             </div>

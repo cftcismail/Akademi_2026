@@ -1,5 +1,6 @@
 import Badge from '../ui/Badge'
 import Modal from '../ui/Modal'
+import { formatEgitimLabel } from '../../utils/helpers'
 
 export default function TalepDetay({ open, onOpenChange, talep }) {
   if (!talep) {
@@ -43,7 +44,7 @@ export default function TalepDetay({ open, onOpenChange, talep }) {
           <div className="chip-list">
             {talep.egitimler.map((egitim) => (
               <span key={egitim.egitimId} className="chip">
-                {egitim.egitimAdi}
+                {formatEgitimLabel(egitim)}
               </span>
             ))}
           </div>

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { v4 as uuidv4 } from 'uuid'
 import { format } from 'date-fns'
-import { GMY_LISTESI, LOCAL_STORAGE_KEYS } from '../data/constants'
+import { EGITIM_KATEGORILERI, GMY_LISTESI, LOCAL_STORAGE_KEYS } from '../data/constants'
 import { initialCatalog, initialPlanlar, initialTalepler } from '../data/initialData'
 import { buildTalepDuplicateKey, normalizeSignatureText } from '../utils/helpers'
 import useLocalStorage from './useLocalStorage'
@@ -24,19 +24,38 @@ function getPlanDateFields(egitimTarihi) {
 }
 
 function syncCatalogEntries(currentCatalog, egitimler) {
-  const existingNames = new Set(currentCatalog.map((item) => item.ad.toLocaleLowerCase('tr-TR')))
+  const existingNames = new Map(
+    currentCatalog.map((item, index) => [item.ad.toLocaleLowerCase('tr-TR'), index]),
+  )
   const nextCatalog = [...currentCatalog]
 
   egitimler.forEach((egitim) => {
     const normalizedName = egitim.egitimAdi.trim().toLocaleLowerCase('tr-TR')
 
-    if (!normalizedName || existingNames.has(normalizedName)) {
+    if (!normalizedName) {
       return
     }
 
-    existingNames.add(normalizedName)
+    if (existingNames.has(normalizedName)) {
+      const currentIndex = existingNames.get(normalizedName)
+      const currentItem = nextCatalog[currentIndex]
+      const nextCode = `${egitim.egitimKodu || ''}`.trim()
+
+      if (currentItem && nextCode && currentItem.kod !== nextCode) {
+        nextCatalog[currentIndex] = {
+          ...currentItem,
+          kod: nextCode,
+          kategori: egitim.kategori || currentItem.kategori,
+        }
+      }
+
+      return
+    }
+
+    existingNames.set(normalizedName, nextCatalog.length)
     nextCatalog.push({
       id: egitim.egitimId || uuidv4(),
+      kod: `${egitim.egitimKodu || ''}`.trim(),
       ad: egitim.egitimAdi.trim(),
       kategori: egitim.kategori,
       sure: egitim.sure || '1 gün',
@@ -62,6 +81,7 @@ function normalizeTalep(talep) {
       .slice(0, 4)
       .map((egitim) => ({
         egitimId: egitim.egitimId || uuidv4(),
+        egitimKodu: `${egitim.egitimKodu || ''}`.trim(),
         egitimAdi: egitim.egitimAdi,
         kategori: egitim.kategori || 'Teknik',
       })),
@@ -75,6 +95,7 @@ function normalizePlan(plan) {
     ...plan,
     calisanKullaniciKodu: plan.calisanKullaniciKodu || '',
     gmy: plan.gmy || '',
+    egitimKodu: `${plan.egitimKodu || ''}`.trim(),
     kategori: plan.kategori || 'Teknik',
     notlar: plan.notlar || '',
   }
@@ -83,6 +104,7 @@ function normalizePlan(plan) {
 function normalizeCatalogItem(item) {
   return {
     id: item.id,
+    kod: `${item.kod || ''}`.trim(),
     ad: item.ad,
     kategori: item.kategori || 'Teknik',
     sure: item.sure || '1 gün',
@@ -107,6 +129,48 @@ function normalizeGmyList(gmyList, talepler, planlar) {
     accumulator.push(normalized)
     return accumulator
   }, [])
+}
+
+function collectActiveCategories(katalog, talepler, planlar) {
+  return [
+    ...katalog.map((item) => item.kategori),
+    ...talepler.flatMap((item) => item.egitimler.map((egitim) => egitim.kategori)),
+    ...planlar.map((item) => item.kategori),
+  ]
+}
+
+function normalizeKategoriList(kategoriList, katalog, talepler, planlar) {
+  const baseValues = kategoriList?.length ? kategoriList : EGITIM_KATEGORILERI
+  const values = [...baseValues, ...collectActiveCategories(katalog, talepler, planlar)]
+
+  return values.reduce((accumulator, value) => {
+    const normalized = `${value || ''}`.trim()
+
+    if (!normalized || accumulator.includes(normalized)) {
+      return accumulator
+    }
+
+    accumulator.push(normalized)
+    return accumulator
+  }, [])
+}
+
+function syncKategoriEntries(currentKategoriList, egitimler) {
+  const existingValues = new Set(currentKategoriList)
+  const nextList = [...currentKategoriList]
+
+  egitimler.forEach((egitim) => {
+    const normalizedCategory = `${egitim.kategori || ''}`.trim()
+
+    if (!normalizedCategory || existingValues.has(normalizedCategory)) {
+      return
+    }
+
+    existingValues.add(normalizedCategory)
+    nextList.push(normalizedCategory)
+  })
+
+  return nextList
 }
 
 function isEmptyTalepPayload(payload) {
@@ -143,8 +207,8 @@ function getIssueDetails(payload, reason) {
   }
 }
 
-function getPlanKey(talepId, egitimAdi) {
-  return `${talepId}::${normalizeSignatureText(egitimAdi)}`
+function getPlanKey(talepId, egitimAdi, egitimKodu = '') {
+  return `${talepId}::${normalizeSignatureText(egitimKodu)}::${normalizeSignatureText(egitimAdi)}`
 }
 
 function createTalepRecord(payload) {
@@ -157,6 +221,7 @@ function createTalepRecord(payload) {
     .slice(0, 4)
     .map((egitim) => ({
       egitimId: egitim.egitimId || uuidv4(),
+      egitimKodu: `${egitim.egitimKodu || ''}`.trim(),
       egitimAdi: egitim.egitimAdi.trim(),
       kategori: egitim.kategori,
     }))
@@ -196,7 +261,7 @@ function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlan
 
   return talep.egitimler
     .filter((egitim) => selectedEgitimIds.includes(egitim.egitimId))
-    .filter((egitim) => !existingPlanKeys.has(getPlanKey(talep.id, egitim.egitimAdi)))
+    .filter((egitim) => !existingPlanKeys.has(getPlanKey(talep.id, egitim.egitimAdi, egitim.egitimKodu)))
     .map((egitim) => ({
       id: uuidv4(),
       talepId: talep.id,
@@ -204,6 +269,7 @@ function buildPlanEntries({ talep, selectedEgitimIds, ortakAlanlar, existingPlan
       calisanSicil: talep.calisanSicil,
       calisanKullaniciKodu: talep.calisanKullaniciKodu,
       gmy: talep.gmy,
+      egitimKodu: `${egitim.egitimKodu || ''}`.trim(),
       egitimAdi: egitim.egitimAdi,
       kategori: egitim.kategori,
       egitimTuru: ortakAlanlar.egitimTuru,
@@ -223,10 +289,19 @@ export default function useEgitimData() {
   const [talepler, setTalepler] = useLocalStorage(LOCAL_STORAGE_KEYS.talepler, initialTalepler)
   const [planlar, setPlanlar] = useLocalStorage(LOCAL_STORAGE_KEYS.planlar, initialPlanlar)
   const [gmyList, setGmyList] = useLocalStorage(LOCAL_STORAGE_KEYS.gmyList, GMY_LISTESI)
+  const [egitimKategorileri, setEgitimKategorileri] = useLocalStorage(
+    LOCAL_STORAGE_KEYS.egitimKategorileri,
+    EGITIM_KATEGORILERI,
+  )
 
   useEffect(() => {
     setGmyList((current) => {
       const cleaned = normalizeGmyList(current, talepler, planlar)
+      return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
+    })
+
+    setEgitimKategorileri((current) => {
+      const cleaned = normalizeKategoriList(current, katalog, talepler, planlar)
       return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
     })
 
@@ -253,7 +328,7 @@ export default function useEgitimData() {
 
       return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
     })
-  }, [planlar, setGmyList, setKatalog, setPlanlar, setTalepler, talepler])
+  }, [katalog, planlar, setEgitimKategorileri, setGmyList, setKatalog, setPlanlar, setTalepler, talepler])
 
   function addGmy(name) {
     const nextName = `${name || ''}`.trim()
@@ -267,6 +342,21 @@ export default function useEgitimData() {
     }
 
     setGmyList((current) => [...current, nextName])
+    return nextName
+  }
+
+  function addEgitimKategorisi(name) {
+    const nextName = `${name || ''}`.trim()
+
+    if (!nextName) {
+      throw new Error('Kategori adı boş olamaz.')
+    }
+
+    if (egitimKategorileri.includes(nextName)) {
+      throw new Error('Aynı isimde kategori zaten mevcut.')
+    }
+
+    setEgitimKategorileri((current) => [...current, nextName])
     return nextName
   }
 
@@ -293,6 +383,37 @@ export default function useEgitimData() {
     return next
   }
 
+  function updateEgitimKategorisi(previousName, nextName) {
+    const previous = `${previousName || ''}`.trim()
+    const next = `${nextName || ''}`.trim()
+
+    if (!previous || !next) {
+      throw new Error('Kategori adı boş olamaz.')
+    }
+
+    if (previous === next) {
+      return next
+    }
+
+    if (egitimKategorileri.includes(next)) {
+      throw new Error('Bu isimde başka bir kategori zaten var.')
+    }
+
+    setEgitimKategorileri((current) => current.map((item) => (item === previous ? next : item)))
+    setKatalog((current) => current.map((item) => (item.kategori === previous ? { ...item, kategori: next } : item)))
+    setTalepler((current) =>
+      current.map((item) => ({
+        ...item,
+        egitimler: item.egitimler.map((egitim) =>
+          egitim.kategori === previous ? { ...egitim, kategori: next } : egitim,
+        ),
+      })),
+    )
+    setPlanlar((current) => current.map((item) => (item.kategori === previous ? { ...item, kategori: next } : item)))
+
+    return next
+  }
+
   function deleteGmy(name) {
     const target = `${name || ''}`.trim()
 
@@ -311,6 +432,28 @@ export default function useEgitimData() {
     }
 
     setGmyList((current) => current.filter((item) => item !== target))
+  }
+
+  function deleteEgitimKategorisi(name) {
+    const target = `${name || ''}`.trim()
+
+    if (!target) {
+      throw new Error('Silinecek kategori bulunamadı.')
+    }
+
+    if (egitimKategorileri.length <= 1) {
+      throw new Error('Sistemde en az 1 eğitim kategorisi kalmalıdır.')
+    }
+
+    const isUsedInCatalog = katalog.some((item) => item.kategori === target)
+    const isUsedInTalepler = talepler.some((item) => item.egitimler.some((egitim) => egitim.kategori === target))
+    const isUsedInPlanlar = planlar.some((item) => item.kategori === target)
+
+    if (isUsedInCatalog || isUsedInTalepler || isUsedInPlanlar) {
+      throw new Error('Bu kategori aktif kayıtlarda kullanılıyor. Önce başka bir kategoriye güncelleyin.')
+    }
+
+    setEgitimKategorileri((current) => current.filter((item) => item !== target))
   }
 
   function addTalep(payload) {
@@ -333,6 +476,7 @@ export default function useEgitimData() {
 
     setTalepler((current) => [nextRecord.talep, ...current])
     setKatalog((current) => syncCatalogEntries(current, nextRecord.egitimler))
+    setEgitimKategorileri((current) => syncKategoriEntries(current, nextRecord.egitimler))
 
     return {
       addedCount: 1,
@@ -378,6 +522,9 @@ export default function useEgitimData() {
       setKatalog((current) =>
         records.reduce((catalogState, record) => syncCatalogEntries(catalogState, record.egitimler), current),
       )
+      setEgitimKategorileri((current) =>
+        records.reduce((categoryState, record) => syncKategoriEntries(categoryState, record.egitimler), current),
+      )
     }
 
     return {
@@ -393,7 +540,7 @@ export default function useEgitimData() {
       throw new Error('Planlanacak talep bulunamadı.')
     }
 
-    const existingPlanKeys = new Set(planlar.map((plan) => getPlanKey(plan.talepId, plan.egitimAdi)))
+    const existingPlanKeys = new Set(planlar.map((plan) => getPlanKey(plan.talepId, plan.egitimAdi, plan.egitimKodu)))
     const nextPlanlar = buildPlanEntries({
       talep,
       selectedEgitimIds,
@@ -425,7 +572,7 @@ export default function useEgitimData() {
       throw new Error('Toplu planlama için en az bir çalışan seçilmelidir.')
     }
 
-    const existingPlanKeys = new Set(planlar.map((plan) => getPlanKey(plan.talepId, plan.egitimAdi)))
+    const existingPlanKeys = new Set(planlar.map((plan) => getPlanKey(plan.talepId, plan.egitimAdi, plan.egitimKodu)))
     const talepIdsToUpdate = new Set()
     const nextPlanlar = []
 
@@ -444,7 +591,7 @@ export default function useEgitimData() {
       })
 
       createdPlans.forEach((plan) => {
-        existingPlanKeys.add(getPlanKey(plan.talepId, plan.egitimAdi))
+        existingPlanKeys.add(getPlanKey(plan.talepId, plan.egitimAdi, plan.egitimKodu))
       })
 
       if (createdPlans.length) {
@@ -523,19 +670,78 @@ export default function useEgitimData() {
     }
   }
 
+  function clearAllPlans() {
+    if (!planlar.length) {
+      return {
+        removedPlanCount: 0,
+        removedTalepCount: 0,
+      }
+    }
+
+    const affectedTalepIds = new Set(planlar.map((plan) => plan.talepId).filter(Boolean))
+    const removedPlanCount = planlar.length
+    const removedTalepCount = talepler.filter((talep) => affectedTalepIds.has(talep.id)).length
+
+    setPlanlar([])
+
+    if (affectedTalepIds.size) {
+      setTalepler((current) => current.filter((talep) => !affectedTalepIds.has(talep.id)))
+    }
+
+    return {
+      removedPlanCount,
+      removedTalepCount,
+    }
+  }
+
+  function deleteTalepYear(year) {
+    const targetYear = Number(year)
+
+    if (!Number.isFinite(targetYear)) {
+      throw new Error('Silinecek talep yılı geçersiz.')
+    }
+
+    const targetTalepler = talepler.filter((talep) => Number(talep.talepYili) === targetYear)
+
+    if (!targetTalepler.length) {
+      return {
+        removedTalepCount: 0,
+        removedPlanCount: 0,
+      }
+    }
+
+    const targetTalepIds = new Set(targetTalepler.map((talep) => talep.id))
+    const removedPlanCount = planlar.filter((plan) => targetTalepIds.has(plan.talepId)).length
+    const removedTalepCount = targetTalepler.length
+
+    setTalepler((current) => current.filter((talep) => Number(talep.talepYili) !== targetYear))
+    setPlanlar((current) => current.filter((plan) => !targetTalepIds.has(plan.talepId)))
+
+    return {
+      removedTalepCount,
+      removedPlanCount,
+    }
+  }
+
   return {
     katalog,
     talepler,
     planlar,
     gmyList,
+    egitimKategorileri,
     addTalep,
     importTalepler,
     planTalep,
     planTalepler,
     updatePlan,
     deletePlan,
+    clearAllPlans,
+    deleteTalepYear,
     addGmy,
     updateGmy,
     deleteGmy,
+    addEgitimKategorisi,
+    updateEgitimKategorisi,
+    deleteEgitimKategorisi,
   }
 }
