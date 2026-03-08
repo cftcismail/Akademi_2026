@@ -10,6 +10,10 @@ function getToday() {
   return format(new Date(), 'yyyy-MM-dd')
 }
 
+function getCurrentYear() {
+  return new Date().getFullYear()
+}
+
 function getPlanDateFields(egitimTarihi) {
   const planDate = new Date(egitimTarihi)
 
@@ -46,6 +50,7 @@ function syncCatalogEntries(currentCatalog, egitimler) {
 function normalizeTalep(talep) {
   return {
     id: talep.id,
+    talepYili: Number(talep.talepYili || getCurrentYear()),
     yoneticiAdi: talep.yoneticiAdi || '',
     yoneticiEmail: talep.yoneticiEmail || '',
     gmy: talep.gmy || '',
@@ -106,6 +111,7 @@ function normalizeGmyList(gmyList, talepler, planlar) {
 
 function isEmptyTalepPayload(payload) {
   return ![
+    payload.talepYili,
     payload.yoneticiAdi,
     payload.yoneticiEmail,
     payload.gmy,
@@ -125,6 +131,7 @@ function getIssueDetails(payload, reason) {
   return {
     rowNumber: payload.rowNumber || 0,
     sourceLabel: getPayloadSourceLabel(payload),
+    talepYili: Number(payload.talepYili || getCurrentYear()),
     calisanAdi: `${payload.calisanAdi || ''}`.trim(),
     calisanSicil: `${payload.calisanSicil || ''}`.trim(),
     calisanKullaniciKodu: `${payload.calisanKullaniciKodu || ''}`.trim(),
@@ -160,6 +167,7 @@ function createTalepRecord(payload) {
 
   const talep = {
     id: uuidv4(),
+    talepYili: Number(payload.talepYili || getCurrentYear()),
     yoneticiAdi: `${payload.yoneticiAdi || ''}`.trim(),
     yoneticiEmail: `${payload.yoneticiEmail || ''}`.trim(),
     gmy: `${payload.gmy || ''}`.trim(),

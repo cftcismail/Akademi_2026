@@ -63,6 +63,7 @@ export function buildEgitimSignature(egitimler = []) {
 
 export function buildTalepDuplicateKey(payload) {
   return [
+    payload.talepYili,
     payload.yoneticiAdi,
     payload.yoneticiEmail,
     payload.gmy,

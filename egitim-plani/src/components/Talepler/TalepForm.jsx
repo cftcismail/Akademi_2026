@@ -13,6 +13,7 @@ function createBlankEgitim(index = 0) {
 
 function createInitialForm(gmyList) {
   return {
+    talepYili: new Date().getFullYear(),
     yoneticiAdi: '',
     yoneticiEmail: '',
     gmy: gmyList[0] || '',
@@ -101,7 +102,7 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
       open={open}
       onOpenChange={onOpenChange}
       title="Yeni talep ekle"
-      description="Yöneticiden gelen talebi sisteme kaydedin"
+      description="Yöneticiden gelen talebi seçilen yıl için sisteme kaydedin"
       footer={
         <>
           <button className="button button--secondary" onClick={() => onOpenChange(false)}>
@@ -114,39 +115,71 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
       }
       maxWidth={900}
     >
-      <form className="form-grid" onSubmit={handleSave}>
-        <label>
-          <span>Yönetici Adı</span>
-          <input value={form.yoneticiAdi} onChange={(event) => setForm({ ...form, yoneticiAdi: event.target.value })} required />
-        </label>
-        <label>
-          <span>Yönetici E-posta</span>
-          <input type="email" value={form.yoneticiEmail} onChange={(event) => setForm({ ...form, yoneticiEmail: event.target.value })} required />
-        </label>
-        <label>
-          <span>GMY</span>
-          <select value={form.gmy} onChange={(event) => setForm({ ...form, gmy: event.target.value })}>
-            {gmyList.map((gmy) => (
-              <option key={gmy} value={gmy}>
-                {gmy}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label>
-          <span>Çalışan Adı</span>
-          <input value={form.calisanAdi} onChange={(event) => setForm({ ...form, calisanAdi: event.target.value })} required />
-        </label>
-        <label>
-          <span>Çalışan Sicil No</span>
-          <input value={form.calisanSicil} onChange={(event) => setForm({ ...form, calisanSicil: event.target.value })} required />
-        </label>
-        <label>
-          <span>Çalışan Kullanıcı Kodu</span>
-          <input value={form.calisanKullaniciKodu} onChange={(event) => setForm({ ...form, calisanKullaniciKodu: event.target.value })} required />
-        </label>
+      <form className="talep-form" onSubmit={handleSave}>
+        <section className="form-section">
+          <div className="section-heading section-heading--tight">
+            <div>
+              <h3>Talep Bilgileri</h3>
+              <p>Talebin bağlı olduğu yıl ve yönetici detayları</p>
+            </div>
+          </div>
+          <div className="form-grid form-grid--section">
+            <label>
+              <span>Talep Yılı</span>
+              <input
+                type="number"
+                min="2024"
+                max="2100"
+                value={form.talepYili}
+                onChange={(event) => setForm({ ...form, talepYili: Number(event.target.value) })}
+                required
+              />
+            </label>
+            <label>
+              <span>Yönetici Adı</span>
+              <input value={form.yoneticiAdi} onChange={(event) => setForm({ ...form, yoneticiAdi: event.target.value })} required />
+            </label>
+            <label>
+              <span>Yönetici E-posta</span>
+              <input type="email" value={form.yoneticiEmail} onChange={(event) => setForm({ ...form, yoneticiEmail: event.target.value })} required />
+            </label>
+            <label>
+              <span>GMY</span>
+              <select value={form.gmy} onChange={(event) => setForm({ ...form, gmy: event.target.value })}>
+                {gmyList.map((gmy) => (
+                  <option key={gmy} value={gmy}>
+                    {gmy}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+        </section>
 
-        <div className="form-grid form-grid--full">
+        <section className="form-section">
+          <div className="section-heading section-heading--tight">
+            <div>
+              <h3>Çalışan Bilgileri</h3>
+              <p>Planlama ve raporlama için temel çalışan bilgileri</p>
+            </div>
+          </div>
+          <div className="form-grid form-grid--section">
+            <label>
+              <span>Çalışan Adı</span>
+              <input value={form.calisanAdi} onChange={(event) => setForm({ ...form, calisanAdi: event.target.value })} required />
+            </label>
+            <label>
+              <span>Çalışan Sicil No</span>
+              <input value={form.calisanSicil} onChange={(event) => setForm({ ...form, calisanSicil: event.target.value })} required />
+            </label>
+            <label>
+              <span>Çalışan Kullanıcı Kodu</span>
+              <input value={form.calisanKullaniciKodu} onChange={(event) => setForm({ ...form, calisanKullaniciKodu: event.target.value })} required />
+            </label>
+          </div>
+        </section>
+
+        <section className="form-section">
           <div className="section-heading section-heading--tight">
             <div>
               <h3>Eğitimler</h3>
@@ -168,8 +201,9 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
             ))}
           </datalist>
 
-          {form.egitimler.map((egitim, index) => (
-            <div key={`${egitim.egitimAdi}-${index}`} className="education-row">
+          <div className="education-list">
+            {form.egitimler.map((egitim, index) => (
+              <div key={`${egitim.egitimAdi}-${index}`} className="education-row">
               <label>
                 <span>Eğitim Adı</span>
                 <input
@@ -202,14 +236,17 @@ export default function TalepForm({ open, onOpenChange, katalog, gmyList, onSubm
               >
                 Kaldır
               </button>
-            </div>
-          ))}
-        </div>
+              </div>
+            ))}
+          </div>
+        </section>
 
-        <label className="form-grid--full">
-          <span>Notlar</span>
-          <textarea value={form.notlar} onChange={(event) => setForm({ ...form, notlar: event.target.value })} rows={4} />
-        </label>
+        <section className="form-section">
+          <label>
+            <span>Notlar</span>
+            <textarea value={form.notlar} onChange={(event) => setForm({ ...form, notlar: event.target.value })} rows={4} />
+          </label>
+        </section>
       </form>
     </Modal>
   )

@@ -195,7 +195,10 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
 }
 
 export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTalepler }) {
-  const trainingMap = talepler.reduce((accumulator, talep) => {
+  const activeTalepYili = Math.max(...talepler.map((talep) => Number(talep.talepYili || new Date().getFullYear())), new Date().getFullYear())
+  const activeTalepler = talepler.filter((talep) => Number(talep.talepYili || new Date().getFullYear()) === activeTalepYili)
+
+  const trainingMap = activeTalepler.reduce((accumulator, talep) => {
     talep.egitimler.forEach((egitim) => {
       if (!accumulator[egitim.egitimAdi]) {
         accumulator[egitim.egitimAdi] = {
@@ -292,7 +295,7 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
         <Card className="surface-card--accent">
           <span className="eyebrow">Eğitim Planlama</span>
           <h2>Çalışanları seçerek tekli veya toplu plan oluşturun</h2>
-          <p>Bekleyen çalışanları işaretleyin, aynı eğitim için tek tek ya da toplu şekilde planlama yapın.</p>
+          <p>{`${activeTalepYili} yılına ait en güncel talepler üzerinden tekli veya toplu planlama yapın.`}</p>
         </Card>
       </section>
 
