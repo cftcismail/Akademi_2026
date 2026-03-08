@@ -1,19 +1,20 @@
 export const GMY_LISTESI = [
-  'Finans GMY',
-  'İnsan Kaynakları GMY',
-  'Operasyon GMY',
-  'Satış GMY',
-  'Teknoloji GMY',
-  'Strateji GMY',
+  'Mali Yönetim Direktörlüğü',
+  'İnsan Kaynakları Direktörlüğü',
+  'KKST GMY',
+  'SOPT GMY',
+  'BİT GMY',
+  'KG GMY',
+  'UİGP GMY',
+
 ]
 
 export const EGITIM_KATEGORILERI = [
-  'Teknik',
-  'Yönetim',
-  'Uyum & Mevzuat',
-  'Kişisel Gelişim',
-  'Satış & Pazarlama',
-  'Operasyon',
+  'Teknik Eğitimler',
+  'Kişisel Gelişim Eğitimleri',
+  'Mesleki Gelişim Eğitimleri',
+  'Sertifika',
+  'Konferans',
 ]
 
 export const EGITIM_TURLERI = ['Yıllık Plan', 'Yıllık Plan Dışı']

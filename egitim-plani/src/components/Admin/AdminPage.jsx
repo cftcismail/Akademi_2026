@@ -53,6 +53,8 @@ export default function AdminPage({
   const [password, setPassword] = useState('')
   const [newGmy, setNewGmy] = useState('')
   const [newKategori, setNewKategori] = useState('')
+  const [catalogSearch, setCatalogSearch] = useState('')
+  const [selectedCatalogCategory, setSelectedCatalogCategory] = useState('Tümü')
   const [newCatalogItem, setNewCatalogItem] = useState({
     kod: '',
     ad: '',
@@ -127,6 +129,25 @@ export default function AdminPage({
       }, {}),
     [katalog, planlar, talepler],
   )
+
+  const filteredCatalog = useMemo(() => {
+    const normalizedQuery = catalogSearch.trim().toLocaleLowerCase('tr-TR')
+
+    return katalog.filter((item) => {
+      const matchesCategory = selectedCatalogCategory === 'Tümü' || item.kategori === selectedCatalogCategory
+
+      if (!matchesCategory) {
+        return false
+      }
+
+      if (!normalizedQuery) {
+        return true
+      }
+
+      return [item.kod, item.ad, item.kategori, item.sure, item.aciklama]
+        .some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
+    })
+  }, [catalogSearch, katalog, selectedCatalogCategory])
 
   const talepYearSummary = useMemo(
     () =>
@@ -465,6 +486,30 @@ export default function AdminPage({
             <p>Eğitim kodu, adı, kategori ve süre bilgilerini admin ekranından yönetin.</p>
           </div>
         </div>
+        <div className="filter-row">
+          <label>
+            <span>Katalog Ara</span>
+            <input
+              value={catalogSearch}
+              onChange={(event) => setCatalogSearch(event.target.value)}
+              placeholder="Kod, eğitim adı veya açıklama ile ara"
+            />
+          </label>
+          <label>
+            <span>Kategori Filtresi</span>
+            <select
+              value={selectedCatalogCategory}
+              onChange={(event) => setSelectedCatalogCategory(event.target.value)}
+            >
+              <option value="Tümü">Tümü</option>
+              {egitimKategorileri.map((kategori) => (
+                <option key={kategori} value={kategori}>
+                  {kategori}
+                </option>
+              ))}
+            </select>
+          </label>
+        </div>
         <div className="form-grid">
           <label>
             <span>Eğitim Kodu</span>
@@ -519,8 +564,14 @@ export default function AdminPage({
             Kataloğa Ekle
           </button>
         </div>
+        <div className="section-heading section-heading--tight">
+          <div>
+            <h3>Katalog Listesi</h3>
+            <p>{`${filteredCatalog.length} kayıt görüntüleniyor`}</p>
+          </div>
+        </div>
         <div className="admin-grid">
-          {katalog.map((item) => (
+          {filteredCatalog.map((item) => (
             <Card key={item.id} className="admin-gmy-card">
               <div className="admin-gmy-card__meta">
                 <span className="eyebrow">Katalog</span>

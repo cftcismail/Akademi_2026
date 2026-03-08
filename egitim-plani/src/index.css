@@ -992,38 +992,70 @@ textarea {
   flex-wrap: wrap;
 }
 
-.training-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 16px;
-}
-
-.training-card {
-  display: grid;
-  gap: 8px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  background: rgba(255, 255, 255, 0.9);
-  text-align: left;
-  box-shadow: var(--shadow);
-}
-
-.training-card span,
 .table-meta {
   color: var(--text-secondary);
 }
 
-.training-card strong {
-  font-size: 1.15rem;
+.training-list-filters {
+  margin-bottom: 18px;
+  align-items: end;
+}
+
+.training-list-summary {
+  display: grid;
+  gap: 6px;
+  min-height: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  background: rgba(248, 250, 252, 0.88);
+}
+
+.training-list-summary span,
+.training-list-item__main span,
+.training-list-item__stats small {
+  color: var(--text-secondary);
+}
+
+.training-list-summary strong {
+  font-size: 1.7rem;
+}
+
+.training-list {
+  display: grid;
+  gap: 12px;
+}
+
+.training-list-item {
+  display: grid;
+  grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  padding: 18px 20px;
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  background: rgba(255, 255, 255, 0.92);
+  text-align: left;
+  box-shadow: var(--shadow);
+}
+
+.training-list-item__main,
+.training-list-item__stats {
+  display: grid;
+  gap: 6px;
+}
+
+.training-list-item__main strong {
+  font-size: 1.08rem;
   color: var(--text-primary);
 }
 
-.training-card__meta {
-  font-size: 0.82rem;
+.training-list-item__stats {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.training-card.active {
+.training-list-item.active {
   border-color: rgba(30, 58, 95, 0.45);
   background: linear-gradient(135deg, rgba(30, 58, 95, 0.1), rgba(45, 95, 138, 0.08));
 }
@@ -1104,5 +1136,20 @@ textarea {
 
   .app-main {
     padding: 0;
+  }
+
+  .training-list-item {
+    grid-template-columns: 1fr;
+  }
+
+  .training-list-item__stats {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+
+  .training-list-item__stats {
+    grid-template-columns: 1fr;
   }
 }

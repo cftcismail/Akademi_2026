@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { toast } from 'react-hot-toast'
 import { Link } from 'react-router-dom'
 import { DURUM_LISTESI, EGITIM_TURLERI } from '../../data/constants'
@@ -47,6 +47,10 @@ function sortTrainingGroups(left, right) {
   }
 
   return formatEgitimLabel(left).localeCompare(formatEgitimLabel(right), 'tr')
+}
+
+function getTrainingDisplayName(training) {
+  return training?.egitimAdi || '-'
 }
 
 function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, onSaveBatch }) {
@@ -103,7 +107,7 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
     <Modal
       open={open}
       onOpenChange={onOpenChange}
-      title={`${formatEgitimLabel(primaryRow.egitim)} planla`}
+      title={`${getTrainingDisplayName(primaryRow.egitim)} planla`}
       description={
         isBulk
           ? `${requestRows.length} çalışan için toplu eğitim planı oluşturun`
@@ -124,7 +128,7 @@ function TrainingPlanningModal({ requestRows, open, onOpenChange, onSaveSingle, 
       <div className="detail-grid detail-grid--compact">
         <div className="detail-card">
           <span>Eğitim</span>
-          <strong>{formatEgitimLabel(primaryRow.egitim)}</strong>
+          <strong>{getTrainingDisplayName(primaryRow.egitim)}</strong>
           <small>{primaryRow.egitim.kategori}</small>
         </div>
         <div className="detail-card">
@@ -238,15 +242,46 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
     })
     .sort(sortTrainingGroups)
 
+  const [trainingSearch, setTrainingSearch] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState('Tümü')
+  const [selectedPlanFilter, setSelectedPlanFilter] = useState('Tümü')
   const [selectedTrainingName, setSelectedTrainingName] = useState(trainingGroups[0]?.trainingKey || '')
   const [selectedRequestKeys, setSelectedRequestKeys] = useState([])
   const [planningRows, setPlanningRows] = useState([])
 
-  const activeTrainingName = trainingGroups.some((item) => item.trainingKey === selectedTrainingName)
-    ? selectedTrainingName
-    : trainingGroups[0]?.trainingKey || ''
+  const availableCategories = useMemo(
+    () => ['Tümü', ...new Set(trainingGroups.map((group) => group.kategori).filter(Boolean))],
+    [trainingGroups],
+  )
 
-  const selectedTraining = trainingGroups.find((item) => item.trainingKey === activeTrainingName)
+  const filteredTrainingGroups = useMemo(() => {
+    const normalizedQuery = trainingSearch.trim().toLocaleLowerCase('tr-TR')
+
+    return trainingGroups.filter((group) => {
+      const matchesCategory = selectedCategory === 'Tümü' || group.kategori === selectedCategory
+      const matchesPlanFilter =
+        selectedPlanFilter === 'Tümü' ||
+        (selectedPlanFilter === 'Bekleyenler' && group.pendingCount > 0) ||
+        (selectedPlanFilter === 'Planlananlar' && group.plannedCount > 0)
+
+      if (!matchesCategory || !matchesPlanFilter) {
+        return false
+      }
+
+      if (!normalizedQuery) {
+        return true
+      }
+
+      return [group.egitimAdi, group.kategori, group.egitimKodu]
+        .some((value) => `${value || ''}`.toLocaleLowerCase('tr-TR').includes(normalizedQuery))
+    })
+  }, [selectedCategory, selectedPlanFilter, trainingGroups, trainingSearch])
+
+  const activeTrainingName = filteredTrainingGroups.some((item) => item.trainingKey === selectedTrainingName)
+    ? selectedTrainingName
+    : filteredTrainingGroups[0]?.trainingKey || ''
+
+  const selectedTraining = filteredTrainingGroups.find((item) => item.trainingKey === activeTrainingName)
   const requestRows = (selectedTraining?.talepler || []).map((entry) => {
     const relatedPlan = planlar.find(
       (plan) =>
@@ -318,128 +353,188 @@ export default function EgitimPlaniPage({ talepler, planlar, planTalep, planTale
         />
       ) : (
         <>
-          <section className="training-grid">
-            {trainingGroups.map((group) => (
-              <button
-                key={group.trainingKey}
-                className={`training-card ${activeTrainingName === group.trainingKey ? 'active' : ''}`.trim()}
-                onClick={() => setSelectedTrainingName(group.trainingKey)}
-              >
-                <span>{group.kategori}</span>
-                <strong>{formatEgitimLabel(group)}</strong>
-                <small>{`${group.pendingCount} bekleyen • ${group.plannedCount} planlandı`}</small>
-                <small className="training-card__meta">{`${group.employeeCount} çalışan • ${group.talepler.length} toplam talep`}</small>
-              </button>
-            ))}
-          </section>
-
-          <section className="stats-grid stats-grid--compact">
-            <Card className="mini-stat">
-              <span>Seçili Eğitim</span>
-              <strong>{formatEgitimLabel(selectedTraining)}</strong>
-            </Card>
-            <Card className="mini-stat">
-              <span>Talep Eden Çalışan</span>
-              <strong>{requestRows.length}</strong>
-            </Card>
-            <Card className="mini-stat">
-              <span>Bekleyen Planlama</span>
-              <strong>{bekleyenCount}</strong>
-            </Card>
-            <Card className="mini-stat">
-              <span>Toplu Seçim</span>
-              <strong>{selectedRows.length}</strong>
-            </Card>
-          </section>
-
           <Card>
-            <div className="section-heading">
+            <div className="section-heading section-heading--tight">
               <div>
-                <h3>{formatEgitimLabel(selectedTraining)}</h3>
-                <p>Bu eğitim için çalışan seçin ve plan durumunu takip edin</p>
-              </div>
-              <div className="selection-toolbar">
-                <button className="button button--secondary" onClick={handleToggleAll}>
-                  {allPendingSelected ? 'Seçimi Temizle' : 'Tüm Bekleyenleri Seç'}
-                </button>
-                <button className="button" disabled={!selectedRows.length} onClick={openBulkPlanner}>
-                  {selectedRows.length ? `${selectedRows.length} Kişiyi Toplu Planla` : 'Toplu Planla'}
-                </button>
+                <h3>Eğitim Listesi</h3>
+                <p>Eğitim adına göre arayın, kategori veya plan durumuna göre filtreleyin.</p>
               </div>
             </div>
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>
-                      <input
-                        className="table-checkbox"
-                        type="checkbox"
-                        checked={allPendingSelected}
-                        onChange={handleToggleAll}
-                      />
-                    </th>
-                    <th>Çalışan Adı</th>
-                    <th>Sicil</th>
-                    <th>Kullanıcı Kodu</th>
-                    <th>GMY</th>
-                    <th>Yönetici</th>
-                    <th>Notlar</th>
-                    <th>Plan Durumu</th>
-                    <th>İşlem</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {requestRows.map((row) => {
-                    const rowKey = getSelectionKey(row)
 
-                    return (
-                      <tr key={rowKey}>
-                        <td>
+            <div className="filter-panel training-list-filters">
+              <label>
+                <span>Eğitim Ara</span>
+                <input
+                  type="search"
+                  placeholder="Eğitim adı, kategori veya kod ile ara"
+                  value={trainingSearch}
+                  onChange={(event) => setTrainingSearch(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>Kategori</span>
+                <select value={selectedCategory} onChange={(event) => setSelectedCategory(event.target.value)}>
+                  {availableCategories.map((category) => (
+                    <option key={category} value={category}>
+                      {category}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>Plan Durumu</span>
+                <select value={selectedPlanFilter} onChange={(event) => setSelectedPlanFilter(event.target.value)}>
+                  <option value="Tümü">Tümü</option>
+                  <option value="Bekleyenler">Bekleyenler</option>
+                  <option value="Planlananlar">Planlananlar</option>
+                </select>
+              </label>
+              <div className="training-list-summary">
+                <span>Gösterilen Eğitim</span>
+                <strong>{filteredTrainingGroups.length}</strong>
+              </div>
+            </div>
+
+            {!filteredTrainingGroups.length ? (
+              <EmptyState
+                title="Filtreye uygun eğitim bulunamadı"
+                description="Arama metnini veya filtreleri değiştirerek tekrar deneyin."
+              />
+            ) : (
+              <div className="training-list">
+                {filteredTrainingGroups.map((group) => (
+                  <button
+                    key={group.trainingKey}
+                    className={`training-list-item ${activeTrainingName === group.trainingKey ? 'active' : ''}`.trim()}
+                    onClick={() => setSelectedTrainingName(group.trainingKey)}
+                  >
+                    <div className="training-list-item__main">
+                      <strong>{getTrainingDisplayName(group)}</strong>
+                      <span>{group.kategori}</span>
+                    </div>
+                    <div className="training-list-item__stats">
+                      <small>{`${group.pendingCount} bekleyen`}</small>
+                      <small>{`${group.plannedCount} planlandı`}</small>
+                      <small>{`${group.employeeCount} çalışan`}</small>
+                      <small>{`${group.talepler.length} toplam talep`}</small>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </Card>
+
+          {filteredTrainingGroups.length ? (
+            <>
+              <section className="stats-grid stats-grid--compact">
+                <Card className="mini-stat">
+                  <span>Seçili Eğitim</span>
+                  <strong>{getTrainingDisplayName(selectedTraining)}</strong>
+                </Card>
+                <Card className="mini-stat">
+                  <span>Talep Eden Çalışan</span>
+                  <strong>{requestRows.length}</strong>
+                </Card>
+                <Card className="mini-stat">
+                  <span>Bekleyen Planlama</span>
+                  <strong>{bekleyenCount}</strong>
+                </Card>
+                <Card className="mini-stat">
+                  <span>Toplu Seçim</span>
+                  <strong>{selectedRows.length}</strong>
+                </Card>
+              </section>
+
+              <Card>
+                <div className="section-heading">
+                  <div>
+                    <h3>{getTrainingDisplayName(selectedTraining)}</h3>
+                    <p>Bu eğitim için çalışan seçin ve plan durumunu takip edin</p>
+                  </div>
+                  <div className="selection-toolbar">
+                    <button className="button button--secondary" onClick={handleToggleAll}>
+                      {allPendingSelected ? 'Seçimi Temizle' : 'Tüm Bekleyenleri Seç'}
+                    </button>
+                    <button className="button" disabled={!selectedRows.length} onClick={openBulkPlanner}>
+                      {selectedRows.length ? `${selectedRows.length} Kişiyi Toplu Planla` : 'Toplu Planla'}
+                    </button>
+                  </div>
+                </div>
+                <div className="table-wrapper">
+                  <table className="data-table">
+                    <thead>
+                      <tr>
+                        <th>
                           <input
                             className="table-checkbox"
                             type="checkbox"
-                            checked={selectedRequestKeys.includes(rowKey)}
-                            disabled={Boolean(row.relatedPlan)}
-                            onChange={() => handleToggleRow(row)}
+                            checked={allPendingSelected}
+                            onChange={handleToggleAll}
                           />
-                        </td>
-                        <td>
-                          <Link className="table-link" to={getEmployeeRoute(row.talep.calisanSicil)}>
-                            {row.talep.calisanAdi}
-                          </Link>
-                        </td>
-                        <td>{row.talep.calisanSicil}</td>
-                        <td>{row.talep.calisanKullaniciKodu || '-'}</td>
-                        <td>{row.talep.gmy}</td>
-                        <td>{row.talep.yoneticiAdi}</td>
-                        <td>{row.talep.notlar || '-'}</td>
-                        <td>
-                          {row.relatedPlan ? (
-                            <div className="stack-list stack-list--tight">
-                              <Badge value={row.relatedPlan.durum} />
-                              <span className="table-meta">{formatDate(row.relatedPlan.egitimTarihi)}</span>
-                            </div>
-                          ) : (
-                            <Badge value="beklemede" />
-                          )}
-                        </td>
-                        <td>
-                          <button
-                            className={`button ${row.relatedPlan ? 'button--secondary' : ''}`.trim()}
-                            disabled={Boolean(row.relatedPlan)}
-                            onClick={() => setPlanningRows([row])}
-                          >
-                            {row.relatedPlan ? 'Planlandı' : 'Tekli Planla'}
-                          </button>
-                        </td>
+                        </th>
+                        <th>Çalışan Adı</th>
+                        <th>Sicil</th>
+                        <th>Kullanıcı Kodu</th>
+                        <th>GMY</th>
+                        <th>Yönetici</th>
+                        <th>Notlar</th>
+                        <th>Plan Durumu</th>
+                        <th>İşlem</th>
                       </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </Card>
+                    </thead>
+                    <tbody>
+                      {requestRows.map((row) => {
+                        const rowKey = getSelectionKey(row)
+
+                        return (
+                          <tr key={rowKey}>
+                            <td>
+                              <input
+                                className="table-checkbox"
+                                type="checkbox"
+                                checked={selectedRequestKeys.includes(rowKey)}
+                                disabled={Boolean(row.relatedPlan)}
+                                onChange={() => handleToggleRow(row)}
+                              />
+                            </td>
+                            <td>
+                              <Link className="table-link" to={getEmployeeRoute(row.talep.calisanSicil)}>
+                                {row.talep.calisanAdi}
+                              </Link>
+                            </td>
+                            <td>{row.talep.calisanSicil}</td>
+                            <td>{row.talep.calisanKullaniciKodu || '-'}</td>
+                            <td>{row.talep.gmy}</td>
+                            <td>{row.talep.yoneticiAdi}</td>
+                            <td>{row.talep.notlar || '-'}</td>
+                            <td>
+                              {row.relatedPlan ? (
+                                <div className="stack-list stack-list--tight">
+                                  <Badge value={row.relatedPlan.durum} />
+                                  <span className="table-meta">{formatDate(row.relatedPlan.egitimTarihi)}</span>
+                                </div>
+                              ) : (
+                                <Badge value="beklemede" />
+                              )}
+                            </td>
+                            <td>
+                              <button
+                                className={`button ${row.relatedPlan ? 'button--secondary' : ''}`.trim()}
+                                disabled={Boolean(row.relatedPlan)}
+                                onClick={() => setPlanningRows([row])}
+                              >
+                                {row.relatedPlan ? 'Planlandı' : 'Tekli Planla'}
+                              </button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </Card>
+            </>
+          ) : null}
 
           <TrainingPlanningModal
             key={planningRows.length ? planningRows.map(getSelectionKey).join('|') : 'planning-modal'}
