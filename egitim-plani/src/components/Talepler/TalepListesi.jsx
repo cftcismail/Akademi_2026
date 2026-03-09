@@ -1,17 +1,25 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { toast } from 'react-hot-toast'
+import { FileSpreadsheet, Upload } from 'lucide-react'
+import * as XLSX from 'xlsx'
 import Badge from '../ui/Badge'
 import Card from '../ui/Card'
 import EmptyState from '../ui/EmptyState'
 import PlanEkleModal from '../EgitimPlani/PlanEkleModal'
 import { formatEgitimLabel, getEmployeeRoute, getTalepKaynagiLabel } from '../../utils/helpers'
+import { mapExcelRowsToTalepler } from '../../utils/talepImport'
 import TalepDetay from './TalepDetay'
 import TalepForm from './TalepForm'
+
+const IMPORT_BATCH_SIZE = 250
+const MAX_VISIBLE_IMPORT_ISSUES = 250
 
 export default function TaleplerPage({
   talepler,
   planTalep,
   addTalep,
+  importTalepler,
   egitmenListesi,
   kurumListesi,
   kurBilgileri,
@@ -22,6 +30,11 @@ export default function TaleplerPage({
   const [selectedTalep, setSelectedTalep] = useState(null)
   const [planningTalep, setPlanningTalep] = useState(null)
   const [showTalepForm, setShowTalepForm] = useState(false)
+  const [isImporting, setIsImporting] = useState(false)
+  const [importProgress, setImportProgress] = useState({ processed: 0, total: 0 })
+  const [validationIssues, setValidationIssues] = useState([])
+  const [hiddenValidationIssueCount, setHiddenValidationIssueCount] = useState(0)
+  const fileInputRef = useRef(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [selectedManager, setSelectedManager] = useState('Tümü')
   const [selectedLocation, setSelectedLocation] = useState('Tümü')
@@ -35,6 +48,39 @@ export default function TaleplerPage({
 
   const activeYear = talepYillari.includes(selectedYear) ? selectedYear : talepYillari[0] || new Date().getFullYear()
   const yearTalepler = talepler.filter((talep) => (talep.talepYili || new Date().getFullYear()) === activeYear)
+
+  async function handleImportFile(event) {
+    const file = event.target.files?.[0]
+    if (!file) return
+    setIsImporting(true)
+    setImportProgress({ processed: 0, total: 0 })
+    try {
+      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
+      const sheetName = workbook.SheetNames[0]
+      if (!sheetName) throw new Error('Excel dosyasında okunacak sayfa bulunamadı.')
+      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { defval: '', raw: true })
+      setImportProgress({ processed: 0, total: rows.length })
+      const result = await importTalepler(
+        mapExcelRowsToTalepler(rows).map((payload) => ({ ...payload, talepYili: activeYear })),
+        { batchSize: IMPORT_BATCH_SIZE, maxIssues: MAX_VISIBLE_IMPORT_ISSUES, onProgress: setImportProgress },
+      )
+      setValidationIssues(result.issues || [])
+      setHiddenValidationIssueCount(result.hiddenIssueCount || 0)
+      if (result.importedCount > 0 && result.totalIssueCount > 0) {
+        toast(`${result.importedCount} talep aktarıldı, ${result.totalIssueCount} satır uyarıya düştü.`, { icon: '!' })
+      } else if (result.importedCount > 0) {
+        toast.success(`${result.importedCount} talep Excel dosyasından içeri aktarıldı.`)
+      } else {
+        toast.error('Geçerli kayıt eklenemedi. Uyarılı satırları kontrol edin.')
+      }
+    } catch (error) {
+      toast.error(error.message || 'Excel dosyası içeri aktarılamadı.')
+    } finally {
+      event.target.value = ''
+      setIsImporting(false)
+      setImportProgress({ processed: 0, total: 0 })
+    }
+  }
   const managerOptions = useMemo(() => ['Tümü', ...new Set(yearTalepler.map((talep) => talep.yoneticiAdi).filter(Boolean))], [yearTalepler])
   const locationOptions = useMemo(() => ['Tümü', ...new Set(yearTalepler.map((talep) => talep.calisanLokasyon).filter(Boolean))], [yearTalepler])
   const activeManager = selectedManager === 'Tümü' || managerOptions.includes(selectedManager) ? selectedManager : 'Tümü'
@@ -85,6 +131,24 @@ export default function TaleplerPage({
         <div className="toolbar-actions">
           <button className="button" onClick={() => setShowTalepForm(true)}>
             Yeni Talep Ekle
+          </button>
+          <a className="button button--secondary" href="/ornek-talep-aktarim.xlsx" download>
+            <FileSpreadsheet size={16} /> Örnek Excel
+          </a>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".xlsx,.xls,.csv"
+            className="sr-only"
+            onChange={handleImportFile}
+          />
+          <button
+            className="button button--secondary"
+            disabled={isImporting}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            <Upload size={16} />
+            {isImporting ? `Yükleniyor (${importProgress.processed}/${importProgress.total})` : 'Excel İle Toplu Yükle'}
           </button>
           <Card className="mini-stat">
             <span>Bekleyen Talep</span>
@@ -234,6 +298,41 @@ export default function TaleplerPage({
           title="Filtreye uygun talep bulunmuyor"
           description="Arama ve filtreleri değiştirin ya da bu yıl için yeni talep ekleyin."
         />
+      )}
+      {validationIssues.length > 0 && (
+        <Card>
+          <div className="import-issues">
+            <h3 className="text-warning">İçeri Aktarma Uyarıları</h3>
+            <button className="button button--secondary button--sm" onClick={() => { setValidationIssues([]); setHiddenValidationIssueCount(0) }}>
+              Uyarıları Kapat
+            </button>
+          </div>
+          <div className="table-wrapper">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Satır</th>
+                  <th>Çalışan</th>
+                  <th>Eğitimler</th>
+                  <th>Neden</th>
+                </tr>
+              </thead>
+              <tbody>
+                {validationIssues.map((issue, i) => (
+                  <tr key={i}>
+                    <td>{issue.sourceLabel}</td>
+                    <td>{issue.calisanAdi || '-'}</td>
+                    <td>{issue.egitimler || '-'}</td>
+                    <td>{issue.reason}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {hiddenValidationIssueCount > 0 && (
+            <p className="text-muted">…ve {hiddenValidationIssueCount} ek uyarı gizlendi.</p>
+          )}
+        </Card>
       )}
       <TalepDetay open={Boolean(selectedTalep)} onOpenChange={() => setSelectedTalep(null)} talep={selectedTalep} />
       <TalepForm

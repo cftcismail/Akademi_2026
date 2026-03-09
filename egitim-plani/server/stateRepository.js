@@ -203,229 +203,212 @@ async function clearRelationalState(client) {
   await client.query('DELETE FROM gmy_list')
 }
 
+const BATCH_SIZE = 500
+
+function buildBatchInsert(baseQuery, rows, columnsPerRow) {
+  if (!rows.length) {
+    return null
+  }
+  const values = []
+  const placeholders = []
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i]
+    const offset = i * columnsPerRow
+    const rowPlaceholders = []
+    for (let col = 0; col < columnsPerRow; col++) {
+      rowPlaceholders.push(`$${offset + col + 1}`)
+      values.push(row[col])
+    }
+    placeholders.push(`(${rowPlaceholders.join(', ')})`)
+  }
+  return { text: `${baseQuery} VALUES ${placeholders.join(', ')}`, values }
+}
+
+async function batchInsert(client, baseQuery, allRows, columnsPerRow) {
+  for (let i = 0; i < allRows.length; i += BATCH_SIZE) {
+    const batch = allRows.slice(i, i + BATCH_SIZE)
+    const query = buildBatchInsert(baseQuery, batch, columnsPerRow)
+    if (query) {
+      await client.query(query.text, query.values)
+    }
+  }
+}
+
 async function persistRelationalState(client, nextState) {
   const sanitized = sanitizeAppState(nextState)
 
   await clearRelationalState(client)
 
-  for (const [index, name] of sanitized.gmyList.entries()) {
-    await client.query('INSERT INTO gmy_list (name, position) VALUES ($1, $2)', [name, index])
-  }
+  // gmy_list
+  await batchInsert(
+    client,
+    'INSERT INTO gmy_list (name, position)',
+    sanitized.gmyList.map((name, index) => [name, index]),
+    2,
+  )
 
-  for (const [index, name] of sanitized.egitimKategorileri.entries()) {
-    await client.query('INSERT INTO training_categories (name, position) VALUES ($1, $2)', [name, index])
-  }
+  // training_categories
+  await batchInsert(
+    client,
+    'INSERT INTO training_categories (name, position)',
+    sanitized.egitimKategorileri.map((name, index) => [name, index]),
+    2,
+  )
 
-  for (const [index, [currency, rate]] of Object.entries(sanitized.kurBilgileri).entries()) {
-    await client.query('INSERT INTO exchange_rates (currency, rate, position) VALUES ($1, $2, $3)', [
-      currency,
-      Number(rate || 0),
+  // exchange_rates
+  await batchInsert(
+    client,
+    'INSERT INTO exchange_rates (currency, rate, position)',
+    Object.entries(sanitized.kurBilgileri).map(([currency, rate], index) => [currency, Number(rate || 0), index]),
+    3,
+  )
+
+  // institutions
+  await batchInsert(
+    client,
+    'INSERT INTO institutions (id, ad, email, uzmanlik, position)',
+    sanitized.kurumListesi.map((inst, index) => [inst.id, inst.ad, inst.email || '', inst.uzmanlik || '', index]),
+    5,
+  )
+
+  // trainers
+  await batchInsert(
+    client,
+    'INSERT INTO trainers (id, ad, birim, email, uzmanlik, position)',
+    sanitized.egitmenListesi.map((t, index) => [t.id, t.ad, t.birim || '', t.email || '', t.uzmanlik || '', index]),
+    6,
+  )
+
+  // catalog
+  await batchInsert(
+    client,
+    'INSERT INTO catalog (id, kod, ad, kategori, sure, aciklama, position)',
+    sanitized.katalog.map((item, index) => [item.id, item.kod || '', item.ad, item.kategori || '', item.sure || '', item.aciklama || '', index]),
+    7,
+  )
+
+  // requests
+  await batchInsert(
+    client,
+    `INSERT INTO requests (
+       id, talep_yili, talep_kaynagi, yonetici_adi, yonetici_email, gmy,
+       calisan_lokasyon, calisan_adi, calisan_sicil, calisan_kullanici_kodu,
+       notlar, durum, position
+     )`,
+    sanitized.talepler.map((talep, index) => [
+      talep.id,
+      Number(talep.talepYili || 0),
+      `${talep.talepKaynagi || 'Yıllık Talep'}`.trim() || 'Yıllık Talep',
+      talep.yoneticiAdi || '',
+      talep.yoneticiEmail || '',
+      talep.gmy || '',
+      talep.calisanLokasyon || '',
+      talep.calisanAdi || '',
+      talep.calisanSicil || '',
+      talep.calisanKullaniciKodu || '',
+      talep.notlar || '',
+      talep.durum || 'beklemede',
       index,
-    ])
-  }
+    ]),
+    13,
+  )
 
-  for (const [index, institution] of sanitized.kurumListesi.entries()) {
-    await client.query(
-      `
-        INSERT INTO institutions (id, ad, email, uzmanlik, position)
-        VALUES ($1, $2, $3, $4, $5)
-      `,
-      [institution.id, institution.ad, institution.email || '', institution.uzmanlik || '', index],
-    )
-  }
-
-  for (const [index, trainer] of sanitized.egitmenListesi.entries()) {
-    await client.query(
-      `
-        INSERT INTO trainers (id, ad, birim, email, uzmanlik, position)
-        VALUES ($1, $2, $3, $4, $5, $6)
-      `,
-      [trainer.id, trainer.ad, trainer.birim || '', trainer.email || '', trainer.uzmanlik || '', index],
-    )
-  }
-
-  for (const [index, item] of sanitized.katalog.entries()) {
-    await client.query(
-      `
-        INSERT INTO catalog (id, kod, ad, kategori, sure, aciklama, position)
-        VALUES ($1, $2, $3, $4, $5, $6, $7)
-      `,
-      [item.id, item.kod || '', item.ad, item.kategori || '', item.sure || '', item.aciklama || '', index],
-    )
-  }
-
-  for (const [index, talep] of sanitized.talepler.entries()) {
-    await client.query(
-      `
-        INSERT INTO requests (
-          id,
-          talep_yili,
-          talep_kaynagi,
-          yonetici_adi,
-          yonetici_email,
-          gmy,
-          calisan_lokasyon,
-          calisan_adi,
-          calisan_sicil,
-          calisan_kullanici_kodu,
-          notlar,
-          durum,
-          position
-        )
-        VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
-      `,
-      [
-        talep.id,
-        Number(talep.talepYili || 0),
-        `${talep.talepKaynagi || 'Yıllık Talep'}`.trim() || 'Yıllık Talep',
-        talep.yoneticiAdi || '',
-        talep.yoneticiEmail || '',
-        talep.gmy || '',
-        talep.calisanLokasyon || '',
-        talep.calisanAdi || '',
-        talep.calisanSicil || '',
-        talep.calisanKullaniciKodu || '',
-        talep.notlar || '',
-        talep.durum || 'beklemede',
-        index,
-      ],
-    )
-
+  // request_trainings
+  const allTrainings = []
+  for (const talep of sanitized.talepler) {
     for (const [trainingIndex, egitim] of (talep.egitimler || []).entries()) {
-      await client.query(
-        `
-          INSERT INTO request_trainings (egitim_id, talep_id, egitim_kodu, egitim_adi, kategori, position)
-          VALUES ($1, $2, $3, $4, $5, $6)
-        `,
-        [
-          egitim.egitimId,
-          talep.id,
-          egitim.egitimKodu || '',
-          egitim.egitimAdi || '',
-          egitim.kategori || '',
-          trainingIndex,
-        ],
-      )
+      allTrainings.push([
+        egitim.egitimId,
+        talep.id,
+        egitim.egitimKodu || '',
+        egitim.egitimAdi || '',
+        egitim.kategori || '',
+        trainingIndex,
+      ])
     }
   }
+  await batchInsert(
+    client,
+    'INSERT INTO request_trainings (egitim_id, talep_id, egitim_kodu, egitim_adi, kategori, position)',
+    allTrainings,
+    6,
+  )
 
-  for (const [index, plan] of sanitized.planlar.entries()) {
-    await client.query(
-      `
-        INSERT INTO plans (
-          id,
-          talep_id,
-          calisan_adi,
-          calisan_sicil,
-          calisan_kullanici_kodu,
-          calisan_lokasyon,
-          gmy,
-          egitim_kodu,
-          egitim_adi,
-          kategori,
-          egitim_turu,
-          planlanma_tarihi,
-          egitim_tarihi,
-          egitim_ayi,
-          egitim_yili,
-          sure,
-          ic_egitim,
-          egitimci,
-          kurum,
-          maliyet,
-          toplam_maliyet,
-          butce_paylasim_adedi,
-          plan_grubu_id,
-          maliyet_para_birimi,
-          doviz_kuru,
-          durum,
-          notlar,
-          position
-        )
-        VALUES (
-          $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12,
-          $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, $24, $25, $26, $27, $28
-        )
-      `,
-      [
-        plan.id,
-        plan.talepId || null,
-        plan.calisanAdi || '',
-        plan.calisanSicil || '',
-        plan.calisanKullaniciKodu || '',
-        plan.calisanLokasyon || '',
-        plan.gmy || '',
-        plan.egitimKodu || '',
-        plan.egitimAdi || '',
-        plan.kategori || '',
-        plan.egitimTuru || '',
-        plan.planlanmaTarihi || '',
-        plan.egitimTarihi || '',
-        Number(plan.egitimAyi || 0),
-        Number(plan.egitimYili || 0),
-        plan.sure || '',
-        Boolean(plan.icEgitim),
-        plan.egitimci || '',
-        plan.kurum || '',
-        Number(plan.maliyet || 0),
-        Number((plan.toplamMaliyet ?? plan.maliyet) || 0),
-        Math.max(1, Number(plan.butcePaylasimAdedi || 1)),
-        plan.planGrubuId || plan.id,
-        plan.maliyetParaBirimi || 'TRY',
-        Number(plan.dovizKuru || 1),
-        plan.durum || 'planlandı',
-        plan.notlar || '',
-        index,
-      ],
-    )
-  }
+  // plans
+  await batchInsert(
+    client,
+    `INSERT INTO plans (
+       id, talep_id, calisan_adi, calisan_sicil, calisan_kullanici_kodu,
+       calisan_lokasyon, gmy, egitim_kodu, egitim_adi, kategori, egitim_turu,
+       planlanma_tarihi, egitim_tarihi, egitim_ayi, egitim_yili, sure,
+       ic_egitim, egitimci, kurum, maliyet, toplam_maliyet,
+       butce_paylasim_adedi, plan_grubu_id, maliyet_para_birimi, doviz_kuru,
+       durum, notlar, position
+     )`,
+    sanitized.planlar.map((plan, index) => [
+      plan.id,
+      plan.talepId || null,
+      plan.calisanAdi || '',
+      plan.calisanSicil || '',
+      plan.calisanKullaniciKodu || '',
+      plan.calisanLokasyon || '',
+      plan.gmy || '',
+      plan.egitimKodu || '',
+      plan.egitimAdi || '',
+      plan.kategori || '',
+      plan.egitimTuru || '',
+      plan.planlanmaTarihi || '',
+      plan.egitimTarihi || '',
+      Number(plan.egitimAyi || 0),
+      Number(plan.egitimYili || 0),
+      plan.sure || '',
+      Boolean(plan.icEgitim),
+      plan.egitimci || '',
+      plan.kurum || '',
+      Number(plan.maliyet || 0),
+      Number((plan.toplamMaliyet ?? plan.maliyet) || 0),
+      Math.max(1, Number(plan.butcePaylasimAdedi || 1)),
+      plan.planGrubuId || plan.id,
+      plan.maliyetParaBirimi || 'TRY',
+      Number(plan.dovizKuru || 1),
+      plan.durum || 'planlandı',
+      plan.notlar || '',
+      index,
+    ]),
+    28,
+  )
 
   return sanitized
 }
 
 async function readRelationalState(client) {
   const defaults = cloneDefaultAppState()
-  const [gmyRows, categoryRows, rateRows, institutionRows, trainerRows, catalogRows, requestRows, requestTrainingRows, planRows] = await Promise.all([
-    client.query('SELECT name FROM gmy_list ORDER BY position ASC'),
-    client.query('SELECT name FROM training_categories ORDER BY position ASC'),
-    client.query('SELECT currency, rate FROM exchange_rates ORDER BY position ASC'),
-    client.query('SELECT id, ad, email, uzmanlik FROM institutions ORDER BY position ASC'),
-    client.query('SELECT id, ad, birim, email, uzmanlik FROM trainers ORDER BY position ASC'),
-    client.query('SELECT id, kod, ad, kategori, sure, aciklama FROM catalog ORDER BY position ASC'),
-    client.query(
-      `
-         SELECT id, talep_yili, yonetici_adi, yonetici_email, gmy, calisan_lokasyon, calisan_adi,
-           talep_kaynagi, calisan_sicil, calisan_kullanici_kodu, notlar, durum
-        FROM requests
-        ORDER BY position ASC
-      `,
-    ),
-    client.query(
-      `
-        SELECT egitim_id, talep_id, egitim_kodu, egitim_adi, kategori, position
-        FROM request_trainings
-        ORDER BY talep_id ASC, position ASC
-      `,
-    ),
-    client.query(
-      `
-        SELECT id, talep_id, calisan_adi, calisan_sicil, calisan_kullanici_kodu, gmy,
-               calisan_lokasyon, egitim_kodu, egitim_adi, kategori, egitim_turu, planlanma_tarihi,
-               egitim_tarihi, egitim_ayi, egitim_yili, sure, ic_egitim, egitimci,
-               kurum, maliyet, toplam_maliyet, butce_paylasim_adedi, plan_grubu_id, maliyet_para_birimi, doviz_kuru, durum, notlar
-        FROM plans
-        ORDER BY position ASC
-      `,
-    ),
-  ])
+  const gmyRows = await client.query('SELECT name FROM gmy_list ORDER BY position ASC')
+  const categoryRows = await client.query('SELECT name FROM training_categories ORDER BY position ASC')
+  const rateRows = await client.query('SELECT currency, rate FROM exchange_rates ORDER BY position ASC')
+  const institutionRows = await client.query('SELECT id, ad, email, uzmanlik FROM institutions ORDER BY position ASC')
+  const trainerRows = await client.query('SELECT id, ad, birim, email, uzmanlik FROM trainers ORDER BY position ASC')
+  const catalogRows = await client.query('SELECT id, kod, ad, kategori, sure, aciklama FROM catalog ORDER BY position ASC')
+  const requestRows = await client.query(
+    `SELECT id, talep_yili, yonetici_adi, yonetici_email, gmy, calisan_lokasyon, calisan_adi,
+            talep_kaynagi, calisan_sicil, calisan_kullanici_kodu, notlar, durum
+     FROM requests ORDER BY position ASC`,
+  )
+  const requestTrainingRows = await client.query(
+    `SELECT egitim_id, talep_id, egitim_kodu, egitim_adi, kategori, position
+     FROM request_trainings ORDER BY talep_id ASC, position ASC`,
+  )
+  const planRows = await client.query(
+    `SELECT id, talep_id, calisan_adi, calisan_sicil, calisan_kullanici_kodu, gmy,
+            calisan_lokasyon, egitim_kodu, egitim_adi, kategori, egitim_turu, planlanma_tarihi,
+            egitim_tarihi, egitim_ayi, egitim_yili, sure, ic_egitim, egitimci,
+            kurum, maliyet, toplam_maliyet, butce_paylasim_adedi, plan_grubu_id,
+            maliyet_para_birimi, doviz_kuru, durum, notlar
+     FROM plans ORDER BY position ASC`,
+  )
 
-  if (gmyRows.rows.length) {
-    defaults.gmyList = gmyRows.rows.map((row) => row.name)
-  }
-
-  if (categoryRows.rows.length) {
-    defaults.egitimKategorileri = categoryRows.rows.map((row) => row.name)
-  }
+  defaults.gmyList = gmyRows.rows.map((row) => row.name)
+  defaults.egitimKategorileri = categoryRows.rows.map((row) => row.name)
 
   if (rateRows.rows.length) {
     defaults.kurBilgileri = rateRows.rows.reduce((accumulator, row) => {

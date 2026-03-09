@@ -53,6 +53,12 @@ Docker Compose aşağıdaki servisleri ayağa kaldırır:
 - `api`: Express tabanlı Node API
 - `postgres`: PostgreSQL veri tabanı
 
+Dış erişim için yayınlanan portlar:
+
+- `8080`: Web uygulaması
+- `3001`: Node API
+- `5432`: PostgreSQL
+
 Admin ekranı: `http://localhost:8080/adminakademi`
 
 İç eğitmen dashboard: `http://localhost:8080/ic-egitmen-dashboard`

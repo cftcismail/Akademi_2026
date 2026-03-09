@@ -19,21 +19,8 @@ const defaultAppState = Object.freeze({
     'Konferans',
   ],
   kurumListesi: [
-    {
-      id: 'institution-academy-plus',
-      ad: 'Akademi Plus',
-      email: 'iletisim@akademiplus.com',
-      uzmanlik: 'Liderlik ve yönetsel gelişim',
-    },
   ],
   egitmenListesi: [
-    {
-      id: 'trainer-ic-egitim',
-      ad: 'İç Eğitim',
-      birim: 'Şirket İçi',
-      email: '',
-      uzmanlik: 'Genel Eğitim',
-    },
   ],
   kurBilgileri: {
     TRY: 1,

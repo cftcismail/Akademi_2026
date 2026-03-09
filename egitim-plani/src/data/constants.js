@@ -28,24 +28,9 @@ export const VARSAYILAN_KURLAR = {
   GBP: 48,
 }
 
-export const VARSAYILAN_KURUMLAR = [
-  {
-    id: 'institution-academy-plus',
-    ad: 'Akademi Plus',
-    email: 'iletisim@akademiplus.com',
-    uzmanlik: 'Liderlik ve yönetsel gelişim',
-  },
-]
+export const VARSAYILAN_KURUMLAR = []
 
-export const VARSAYILAN_EGITMENLER = [
-  {
-    id: 'trainer-ic-egitim',
-    ad: 'İç Eğitim',
-    birim: 'Şirket İçi',
-    email: '',
-    uzmanlik: 'Genel Eğitim',
-  },
-]
+export const VARSAYILAN_EGITMENLER = []
 
 export const DURUM_LISTESI = [
   'planlandı',

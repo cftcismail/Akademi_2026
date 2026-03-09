@@ -1,22 +1,41 @@
 const COLUMN_ALIASES = {
+  // Yönetici
   yoneticiadi: 'yoneticiAdi',
   yoneticiad: 'yoneticiAdi',
   yneticiadi: 'yoneticiAdi',
   yneticiad: 'yoneticiAdi',
+  yoneticiadisoyadi: 'yoneticiAdi',
+  yonetici: 'yoneticiAdi',
+  mudur: 'yoneticiAdi',
   yoneticieposta: 'yoneticiEmail',
   yoneticiep: 'yoneticiEmail',
   yoneticiemail: 'yoneticiEmail',
   yneticieposta: 'yoneticiEmail',
   yneticiemail: 'yoneticiEmail',
+  yoneticimail: 'yoneticiEmail',
+  // GMY
   gmy: 'gmy',
+  genelmuduryardimcisi: 'gmy',
+  // Lokasyon
   lokasyon: 'calisanLokasyon',
   calisanlokasyon: 'calisanLokasyon',
   alanlokasyon: 'calisanLokasyon',
   lokasyonbilgisi: 'calisanLokasyon',
+  sube: 'calisanLokasyon',
+  bolge: 'calisanLokasyon',
+  // Çalışan adı
   calisanadi: 'calisanAdi',
   calisanad: 'calisanAdi',
+  calisanadisoyadi: 'calisanAdi',
   alanadi: 'calisanAdi',
   alanad: 'calisanAdi',
+  personeladi: 'calisanAdi',
+  personelad: 'calisanAdi',
+  personeladisoyadi: 'calisanAdi',
+  adsoyad: 'calisanAdi',
+  adisoyadi: 'calisanAdi',
+  isim: 'calisanAdi',
+  // Kullanıcı kodu
   calisankullanicikodu: 'calisanKullaniciKodu',
   calisankul: 'calisanKullaniciKodu',
   alankullanicikodu: 'calisanKullaniciKodu',
@@ -24,12 +43,20 @@ const COLUMN_ALIASES = {
   alankullanckodu: 'calisanKullaniciKodu',
   calisankod: 'calisanKullaniciKodu',
   kullanicikodu: 'calisanKullaniciKodu',
+  // Sicil
   calisansicil: 'calisanSicil',
   calisansicilno: 'calisanSicil',
   calisansic: 'calisanSicil',
   alansicil: 'calisanSicil',
   alansicilno: 'calisanSicil',
+  sicil: 'calisanSicil',
+  sicilno: 'calisanSicil',
+  sicilnumarasi: 'calisanSicil',
+  // Notlar
   notlar: 'notlar',
+  not: 'notlar',
+  aciklama: 'notlar',
+  aciklamalar: 'notlar',
 }
 
 export function normalizeImportHeader(value) {
@@ -67,13 +94,13 @@ export function mapExcelRowsToTalepler(rows) {
         return
       }
 
-      const egitimMatch = key.match(/^(?:egitim|eitim|gitim)([1-4])(adi|ad|kategori|kat|kodu|kod)$/)
+      const egitimMatch = key.match(/^(?:egitim|eitim|gitim)([1-4])?(adi|ad|kategori|kat|ka|kodu|kod|ko)$/)
 
       if (!egitimMatch) {
         return
       }
 
-      const egitimIndex = Number(egitimMatch[1]) - 1
+      const egitimIndex = egitimMatch[1] ? Number(egitimMatch[1]) - 1 : 0
       const egitimField = egitimMatch[2]
       const nextEgitim = mapped.egitimler[egitimIndex] || {
         egitimKodu: '',
@@ -81,7 +108,7 @@ export function mapExcelRowsToTalepler(rows) {
         kategori: 'Teknik',
       }
 
-      if (egitimField === 'kodu' || egitimField === 'kod') {
+      if (egitimField === 'kodu' || egitimField === 'kod' || egitimField === 'ko') {
         nextEgitim.egitimKodu = `${value || ''}`.trim()
       }
 
@@ -89,7 +116,7 @@ export function mapExcelRowsToTalepler(rows) {
         nextEgitim.egitimAdi = `${value || ''}`.trim()
       }
 
-      if (egitimField === 'kategori' || egitimField === 'kat') {
+      if (egitimField === 'kategori' || egitimField === 'kat' || egitimField === 'ka') {
         nextEgitim.kategori = `${value || ''}`.trim() || 'Teknik'
       }
 

@@ -169,54 +169,18 @@ function normalizeInstitutionItem(item) {
   }
 }
 
-function normalizeTrainerList(trainerList, planlar) {
-  const normalizedList = (trainerList?.length ? trainerList : VARSAYILAN_EGITMENLER)
+function normalizeTrainerList(trainerList) {
+  const baseList = Array.isArray(trainerList) ? trainerList : VARSAYILAN_EGITMENLER
+  return baseList
     .map((item) => normalizeTrainerItem(item))
     .filter((item) => item.ad)
-
-  const names = new Set(normalizedList.map((item) => normalizeSignatureText(item.ad)))
-  const nextList = [...normalizedList]
-
-  planlar.forEach((plan) => {
-    const name = `${plan.egitimci || ''}`.trim()
-    const normalizedName = normalizeSignatureText(name)
-
-    if (!name || names.has(normalizedName)) {
-      return
-    }
-
-    names.add(normalizedName)
-    nextList.push(normalizeTrainerItem({ ad: name }))
-  })
-
-  return nextList
 }
 
-function normalizeInstitutionList(kurumListesi, planlar) {
-  const normalizedList = (kurumListesi?.length ? kurumListesi : VARSAYILAN_KURUMLAR)
+function normalizeInstitutionList(kurumListesi) {
+  const baseList = Array.isArray(kurumListesi) ? kurumListesi : VARSAYILAN_KURUMLAR
+  return baseList
     .map((item) => normalizeInstitutionItem(item))
     .filter((item) => item.ad)
-
-  const names = new Set(normalizedList.map((item) => normalizeSignatureText(item.ad)))
-  const nextList = [...normalizedList]
-
-  planlar.forEach((plan) => {
-    if (plan.icEgitim) {
-      return
-    }
-
-    const kurum = `${plan.kurum || plan.egitimci || ''}`.trim()
-    const normalizedName = normalizeSignatureText(kurum)
-
-    if (!kurum || names.has(normalizedName)) {
-      return
-    }
-
-    names.add(normalizedName)
-    nextList.push(normalizeInstitutionItem({ ad: kurum }))
-  })
-
-  return nextList
 }
 
 function normalizeCurrencyRates(currencyRates) {
@@ -246,7 +210,8 @@ function isSeededSampleId(id, pattern) {
 }
 
 function normalizeGmyList(gmyList, talepler, planlar) {
-  const values = [...(gmyList?.length ? gmyList : GMY_LISTESI), ...talepler.map((item) => item.gmy), ...planlar.map((item) => item.gmy)]
+  const baseValues = Array.isArray(gmyList) ? gmyList : GMY_LISTESI
+  const values = [...baseValues, ...talepler.map((item) => item.gmy), ...planlar.map((item) => item.gmy)]
 
   return values.reduce((accumulator, value) => {
     const normalized = `${value || ''}`.trim()
@@ -269,7 +234,7 @@ function collectActiveCategories(katalog, talepler, planlar) {
 }
 
 function normalizeKategoriList(kategoriList, katalog, talepler, planlar) {
-  const baseValues = kategoriList?.length ? kategoriList : EGITIM_KATEGORILERI
+  const baseValues = Array.isArray(kategoriList) ? kategoriList : EGITIM_KATEGORILERI
   const values = [...baseValues, ...collectActiveCategories(katalog, talepler, planlar)]
 
   return values.reduce((accumulator, value) => {
@@ -584,7 +549,7 @@ export default function useEgitimData() {
           error: error.message || 'Merkezi veri servisine ulaşılamadı.',
         }))
       }
-    }, 250)
+    }, 1500)
 
     return () => {
       window.clearTimeout(syncTimer)
@@ -627,12 +592,12 @@ export default function useEgitimData() {
     })
 
     setEgitmenListesi((current) => {
-      const cleaned = normalizeTrainerList(current, planlar)
+      const cleaned = normalizeTrainerList(current)
       return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
     })
 
     setKurumListesi((current) => {
-      const cleaned = normalizeInstitutionList(current, planlar)
+      const cleaned = normalizeInstitutionList(current)
       return JSON.stringify(cleaned) === JSON.stringify(current) ? current : cleaned
     })
 
@@ -1062,12 +1027,12 @@ export default function useEgitimData() {
         egitimler: talep.egitimler.map((egitim) =>
           matchesCatalogTraining(egitim, currentItem)
             ? {
-                ...egitim,
-                egitimId: nextItem.id,
-                egitimKodu: nextItem.kod,
-                egitimAdi: nextItem.ad,
-                kategori: nextItem.kategori,
-              }
+              ...egitim,
+              egitimId: nextItem.id,
+              egitimKodu: nextItem.kod,
+              egitimAdi: nextItem.ad,
+              kategori: nextItem.kategori,
+            }
             : egitim,
         ),
       })),
@@ -1253,9 +1218,9 @@ export default function useEgitimData() {
       current.map((item) =>
         item.id === talepId
           ? {
-              ...item,
-              durum: 'plana_eklendi',
-            }
+            ...item,
+            durum: 'plana_eklendi',
+          }
           : item,
       ),
     )
@@ -1321,9 +1286,9 @@ export default function useEgitimData() {
       current.map((item) =>
         talepIdsToUpdate.has(item.id)
           ? {
-              ...item,
-              durum: 'plana_eklendi',
-            }
+            ...item,
+            durum: 'plana_eklendi',
+          }
           : item,
       ),
     )
@@ -1386,9 +1351,9 @@ export default function useEgitimData() {
         current.map((talep) =>
           talep.id === targetPlan.talepId
             ? {
-                ...talep,
-                durum: 'beklemede',
-              }
+              ...talep,
+              durum: 'beklemede',
+            }
             : talep,
         ),
       )
