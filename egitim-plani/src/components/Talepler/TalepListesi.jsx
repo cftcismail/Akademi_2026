@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { toast } from 'react-hot-toast'
 import { FileSpreadsheet, Upload } from 'lucide-react'
@@ -14,6 +14,16 @@ import TalepForm from './TalepForm'
 
 const IMPORT_BATCH_SIZE = 250
 const MAX_VISIBLE_IMPORT_ISSUES = 250
+const PAGE_SIZE_OPTIONS = [50, 100, 150, 200]
+const DEFAULT_TALEP_PAGE_SIZE = 50
+
+function buildPageNumbers(currentPage, pageCount, windowSize = 7) {
+  const safeWindowSize = Math.max(3, windowSize)
+  const halfWindow = Math.floor(safeWindowSize / 2)
+  const startPage = Math.max(1, Math.min(currentPage - halfWindow, pageCount - safeWindowSize + 1))
+  const endPage = Math.min(pageCount, startPage + safeWindowSize - 1)
+  return Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index)
+}
 
 export default function TaleplerPage({
   talepler,
@@ -40,6 +50,8 @@ export default function TaleplerPage({
   const [selectedLocation, setSelectedLocation] = useState('Tümü')
   const [selectedSource, setSelectedSource] = useState('Tümü')
   const [selectedStatus, setSelectedStatus] = useState('Tümü')
+  const [rowsPerPage, setRowsPerPage] = useState(DEFAULT_TALEP_PAGE_SIZE)
+  const [currentPage, setCurrentPage] = useState(1)
   const talepYillari = useMemo(
     () => [...new Set(talepler.map((talep) => talep.talepYili || new Date().getFullYear()))].sort((a, b) => b - a),
     [talepler],
@@ -119,6 +131,17 @@ export default function TaleplerPage({
   const planlananTalepSayisi = visibleTalepler.filter((talep) => talep.durum === 'plana_eklendi').length
   const yillikTalepSayisi = visibleTalepler.filter((talep) => getTalepKaynagiLabel(talep) === 'Yıllık Talep').length
   const bireyselTalepSayisi = visibleTalepler.filter((talep) => getTalepKaynagiLabel(talep) === 'Bireysel Talep').length
+  const pageCount = Math.max(1, Math.ceil(visibleTalepler.length / rowsPerPage))
+  const safePage = Math.min(currentPage, pageCount)
+  const pageNumbers = useMemo(() => buildPageNumbers(safePage, pageCount), [safePage, pageCount])
+  const paginatedTalepler = useMemo(() => {
+    const startIndex = (safePage - 1) * rowsPerPage
+    return visibleTalepler.slice(startIndex, startIndex + rowsPerPage)
+  }, [rowsPerPage, safePage, visibleTalepler])
+
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [activeYear, rowsPerPage, searchQuery, selectedManager, selectedLocation, selectedSource, selectedStatus])
 
   return (
     <div className="page-stack">
@@ -249,7 +272,7 @@ export default function TaleplerPage({
                 </tr>
               </thead>
               <tbody>
-                {visibleTalepler.map((talep) => (
+                {paginatedTalepler.map((talep) => (
                   <tr key={talep.id}>
                     <td>{talep.talepYili}</td>
                     <td>
@@ -291,6 +314,39 @@ export default function TaleplerPage({
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="pagination-bar">
+            <label className="page-size-control">
+              <span>Satır</span>
+              <select value={rowsPerPage} onChange={(event) => setRowsPerPage(Number(event.target.value))}>
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <button className="button button--secondary" disabled={safePage <= 1} onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}>
+              Önceki
+            </button>
+            <div className="pagination-pages">
+              {pageNumbers.map((pageNumber) => (
+                <button
+                  key={pageNumber}
+                  className={`button button--secondary ${pageNumber === safePage ? 'is-active' : ''}`.trim()}
+                  onClick={() => setCurrentPage(pageNumber)}
+                >
+                  {pageNumber}
+                </button>
+              ))}
+            </div>
+            <button
+              className="button button--secondary"
+              disabled={safePage >= pageCount}
+              onClick={() => setCurrentPage((page) => Math.min(pageCount, page + 1))}
+            >
+              Sonraki
+            </button>
           </div>
         </Card>
       ) : (

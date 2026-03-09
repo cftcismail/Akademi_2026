@@ -9,7 +9,8 @@ import EmptyState from '../ui/EmptyState'
 import Modal from '../ui/Modal'
 
 const TRAINING_PAGE_SIZE = 12
-const EMPLOYEE_PAGE_SIZE = 15
+const PAGE_SIZE_OPTIONS = [50, 100, 150, 200]
+const DEFAULT_EMPLOYEE_PAGE_SIZE = 50
 
 function createPlanningDraft() {
   return {
@@ -122,6 +123,14 @@ function getPageCount(total, pageSize) {
 function paginate(items, page, pageSize) {
   const startIndex = (page - 1) * pageSize
   return items.slice(startIndex, startIndex + pageSize)
+}
+
+function buildPageNumbers(currentPage, pageCount, windowSize = 7) {
+  const safeWindowSize = Math.max(3, windowSize)
+  const halfWindow = Math.floor(safeWindowSize / 2)
+  const startPage = Math.max(1, Math.min(currentPage - halfWindow, pageCount - safeWindowSize + 1))
+  const endPage = Math.min(pageCount, startPage + safeWindowSize - 1)
+  return Array.from({ length: endPage - startPage + 1 }, (_, index) => startPage + index)
 }
 
 function TrainingPlanningModal({
@@ -307,27 +316,27 @@ function TrainingPlanningModal({
         <label>
           <span>İç Eğitmen</span>
           <select
-              value={activeDraft.egitimci}
-              disabled={!activeDraft.icEgitim}
-              onChange={(event) => updateDraft((current) => ({ ...current, egitimci: event.target.value }))}
-            >
-              <option value="">İç eğitmen seçin</option>
-              {egitmenListesi.map((trainer) => (
-                <option key={trainer.id} value={trainer.ad}>{`${trainer.ad}${trainer.birim ? ` • ${trainer.birim}` : ''}`}</option>
-              ))}
+            value={activeDraft.egitimci}
+            disabled={!activeDraft.icEgitim}
+            onChange={(event) => updateDraft((current) => ({ ...current, egitimci: event.target.value }))}
+          >
+            <option value="">İç eğitmen seçin</option>
+            {egitmenListesi.map((trainer) => (
+              <option key={trainer.id} value={trainer.ad}>{`${trainer.ad}${trainer.birim ? ` • ${trainer.birim}` : ''}`}</option>
+            ))}
           </select>
         </label>
         <label>
           <span>Kurum</span>
           <select
-              value={activeDraft.kurum}
-              disabled={activeDraft.icEgitim}
-              onChange={(event) => updateDraft((current) => ({ ...current, kurum: event.target.value }))}
-            >
-              <option value="">Kurum seçin</option>
-              {kurumListesi.map((institution) => (
-                <option key={institution.id} value={institution.ad}>{institution.ad}</option>
-              ))}
+            value={activeDraft.kurum}
+            disabled={activeDraft.icEgitim}
+            onChange={(event) => updateDraft((current) => ({ ...current, kurum: event.target.value }))}
+          >
+            <option value="">Kurum seçin</option>
+            {kurumListesi.map((institution) => (
+              <option key={institution.id} value={institution.ad}>{institution.ad}</option>
+            ))}
           </select>
         </label>
         <label>
@@ -449,6 +458,7 @@ export default function EgitimPlaniPage({
   const [employeeSearch, setEmployeeSearch] = useState('')
   const [selectedEmployeeStatus, setSelectedEmployeeStatus] = useState('Tümü')
   const [selectedEmployeeGmy, setSelectedEmployeeGmy] = useState('Tümü')
+  const [employeePageSize, setEmployeePageSize] = useState(DEFAULT_EMPLOYEE_PAGE_SIZE)
   const [employeePage, setEmployeePage] = useState(1)
   const [selectedRequestKeys, setSelectedRequestKeys] = useState([])
   const [planningRows, setPlanningRows] = useState([])
@@ -555,11 +565,12 @@ export default function EgitimPlaniPage({
     }).sort(sortRequestRows)
   }, [employeeSearch, requestRows, selectedEmployeeGmy, selectedEmployeeStatus])
 
-  const employeePageCount = getPageCount(filteredRequestRows.length, EMPLOYEE_PAGE_SIZE)
+  const employeePageCount = getPageCount(filteredRequestRows.length, employeePageSize)
   const safeEmployeePage = Math.min(employeePage, employeePageCount)
+  const employeePageNumbers = useMemo(() => buildPageNumbers(safeEmployeePage, employeePageCount), [employeePageCount, safeEmployeePage])
   const paginatedRequestRows = useMemo(
-    () => paginate(filteredRequestRows, safeEmployeePage, EMPLOYEE_PAGE_SIZE),
-    [filteredRequestRows, safeEmployeePage],
+    () => paginate(filteredRequestRows, safeEmployeePage, employeePageSize),
+    [employeePageSize, filteredRequestRows, safeEmployeePage],
   )
 
   const filteredPendingRows = filteredRequestRows.filter((row) => !row.relatedPlan)
@@ -962,10 +973,36 @@ export default function EgitimPlaniPage({
                       </div>
 
                       <div className="pagination-bar pagination-bar--detail">
+                        <label className="page-size-control">
+                          <span>Satır</span>
+                          <select
+                            value={employeePageSize}
+                            onChange={(event) => {
+                              setEmployeePageSize(Number(event.target.value))
+                              setEmployeePage(1)
+                            }}
+                          >
+                            {PAGE_SIZE_OPTIONS.map((size) => (
+                              <option key={size} value={size}>
+                                {size}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
                         <button className="button button--secondary" disabled={safeEmployeePage <= 1} onClick={() => setEmployeePage((page) => Math.max(1, page - 1))}>
                           Önceki
                         </button>
-                        <span>{`Sayfa ${safeEmployeePage} / ${employeePageCount}`}</span>
+                        <div className="pagination-pages">
+                          {employeePageNumbers.map((pageNumber) => (
+                            <button
+                              key={pageNumber}
+                              className={`button button--secondary ${pageNumber === safeEmployeePage ? 'is-active' : ''}`.trim()}
+                              onClick={() => setEmployeePage(pageNumber)}
+                            >
+                              {pageNumber}
+                            </button>
+                          ))}
+                        </div>
                         <button
                           className="button button--secondary"
                           disabled={safeEmployeePage >= employeePageCount}

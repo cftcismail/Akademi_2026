@@ -16,6 +16,7 @@ import {
   isRemoteSyncEnabled,
   readLocalAppState,
   replaceRemoteAppState,
+  uploadTaleplerExcel,
   writeLocalAppState,
 } from '../services/appStateApi'
 import { buildTalepDuplicateKey, normalizeSignatureText } from '../utils/helpers'
@@ -937,13 +938,28 @@ export default function useEgitimData() {
       throw new Error('Sistemde en az 1 eğitim kategorisi kalmalıdır.')
     }
 
-    const isUsedInCatalog = katalog.some((item) => item.kategori === target)
-    const isUsedInTalepler = talepler.some((item) => item.egitimler.some((egitim) => egitim.kategori === target))
-    const isUsedInPlanlar = planlar.some((item) => item.kategori === target)
+    const fallbackCategory = egitimKategorileri.find((item) => item !== target)
 
-    if (isUsedInCatalog || isUsedInTalepler || isUsedInPlanlar) {
-      throw new Error('Bu kategori aktif kayıtlarda kullanılıyor. Önce başka bir kategoriye güncelleyin.')
+    if (!fallbackCategory) {
+      throw new Error('Sistemde en az 1 eğitim kategorisi kalmalıdır.')
     }
+
+    setKatalog((current) =>
+      current.map((item) => (item.kategori === target ? { ...item, kategori: fallbackCategory } : item)),
+    )
+
+    setTalepler((current) =>
+      current.map((item) => ({
+        ...item,
+        egitimler: item.egitimler.map((egitim) =>
+          egitim.kategori === target ? { ...egitim, kategori: fallbackCategory } : egitim,
+        ),
+      })),
+    )
+
+    setPlanlar((current) =>
+      current.map((item) => (item.kategori === target ? { ...item, kategori: fallbackCategory } : item)),
+    )
 
     setEgitimKategorileri((current) => current.filter((item) => item !== target))
   }
@@ -1186,6 +1202,28 @@ export default function useEgitimData() {
     }
   }
 
+  async function importTaleplerFromExcelFile(file, options = {}) {
+    if (!isRemoteSyncEnabled()) {
+      throw new Error('Sunucu üzerinden import için merkezi veri servisi aktif olmalıdır.')
+    }
+
+    const result = await uploadTaleplerExcel(file, {
+      talepYili: options.talepYili,
+      maxIssues: options.maxIssues,
+    })
+
+    const refreshedState = await fetchRemoteAppState(DEFAULT_APP_STATE)
+    applyAppStateSnapshot(refreshedState)
+    lastSyncedStateRef.current = JSON.stringify(refreshedState)
+    setSyncStatus((current) => ({
+      ...current,
+      mode: 'remote',
+      error: '',
+    }))
+
+    return result
+  }
+
   function planTalep({ talepId, selectedEgitimIds, ortakAlanlar }) {
     const talep = talepler.find((item) => item.id === talepId)
 
@@ -1425,6 +1463,7 @@ export default function useEgitimData() {
     syncStatus,
     addTalep,
     importTalepler,
+    importTaleplerFromExcelFile,
     planTalep,
     planTalepler,
     updatePlan,

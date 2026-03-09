@@ -1,4 +1,5 @@
 import { pool } from './db.js'
+import { randomUUID } from 'node:crypto'
 import { APP_STATE_KEYS, cloneDefaultAppState, sanitizeAppState } from './defaultAppState.js'
 
 const CREATE_TABLE_STATEMENTS = [
@@ -561,4 +562,368 @@ export async function writeAppState(nextState) {
 
 export async function checkDatabaseHealth() {
   await pool.query('SELECT 1')
+}
+
+function normalizeSignatureText(value) {
+  return `${value || ''}`
+    .trim()
+    .replace(/\s+/g, ' ')
+    .toLocaleLowerCase('tr-TR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+}
+
+function buildEgitimSignature(egitimler = []) {
+  return [...egitimler]
+    .filter((egitim) => egitim?.egitimAdi)
+    .map((egitim) => {
+      const egitimKodu = normalizeSignatureText(egitim.egitimKodu)
+      const egitimAdi = normalizeSignatureText(egitim.egitimAdi)
+      const kategori = normalizeSignatureText(egitim.kategori)
+      return `${egitimKodu}::${egitimAdi}::${kategori}`
+    })
+    .sort((left, right) => left.localeCompare(right, 'tr'))
+    .join('|')
+}
+
+function buildTalepDuplicateKey(payload) {
+  return [
+    payload.talepYili,
+    payload.talepKaynagi || 'Yıllık Talep',
+    payload.yoneticiAdi,
+    payload.yoneticiEmail,
+    payload.gmy,
+    payload.calisanAdi,
+    payload.calisanSicil,
+    payload.calisanKullaniciKodu,
+    payload.notlar,
+    buildEgitimSignature(payload.egitimler),
+  ]
+    .map((value) => normalizeSignatureText(value))
+    .join('||')
+}
+
+function isEmptyTalepPayload(payload) {
+  return ![
+    payload.yoneticiAdi,
+    payload.yoneticiEmail,
+    payload.gmy,
+    payload.calisanAdi,
+    payload.calisanSicil,
+    payload.calisanKullaniciKodu,
+    payload.notlar,
+    ...(payload.egitimler || []).map((egitim) => egitim.egitimAdi),
+  ].some((value) => `${value || ''}`.trim())
+}
+
+function getPayloadSourceLabel(payload) {
+  return payload.rowNumber ? `Satır ${payload.rowNumber}` : 'Excel'
+}
+
+function getIssueDetails(payload, reason) {
+  return {
+    rowNumber: payload.rowNumber || 0,
+    sourceLabel: getPayloadSourceLabel(payload),
+    talepYili: Number(payload.talepYili || new Date().getFullYear()),
+    calisanAdi: `${payload.calisanAdi || ''}`.trim(),
+    calisanLokasyon: `${payload.calisanLokasyon || ''}`.trim(),
+    calisanSicil: `${payload.calisanSicil || ''}`.trim(),
+    calisanKullaniciKodu: `${payload.calisanKullaniciKodu || ''}`.trim(),
+    egitimler: (payload.egitimler || [])
+      .filter((egitim) => egitim?.egitimAdi)
+      .map((egitim) => egitim.egitimAdi.trim())
+      .join(', '),
+    reason,
+  }
+}
+
+function createTalepRecord(payload, fallbackYear) {
+  if (isEmptyTalepPayload(payload)) {
+    return null
+  }
+
+  const validEgitimler = (payload.egitimler || [])
+    .filter((egitim) => `${egitim?.egitimAdi || ''}`.trim())
+    .slice(0, 4)
+    .map((egitim) => ({
+      egitimId: egitim.egitimId || randomUUID(),
+      egitimKodu: `${egitim.egitimKodu || ''}`.trim(),
+      egitimAdi: `${egitim.egitimAdi || ''}`.trim(),
+      kategori: `${egitim.kategori || 'Teknik'}`.trim() || 'Teknik',
+    }))
+
+  if (validEgitimler.length < 1 || validEgitimler.length > 4) {
+    throw new Error('En az 1, en fazla 4 eğitim olmalıdır.')
+  }
+
+  const talep = {
+    id: randomUUID(),
+    talepYili: Number(payload.talepYili || fallbackYear),
+    talepKaynagi: `${payload.talepKaynagi || 'Yıllık Talep'}`.trim() || 'Yıllık Talep',
+    yoneticiAdi: `${payload.yoneticiAdi || ''}`.trim(),
+    yoneticiEmail: `${payload.yoneticiEmail || ''}`.trim(),
+    gmy: `${payload.gmy || ''}`.trim(),
+    calisanLokasyon: `${payload.calisanLokasyon || ''}`.trim(),
+    calisanAdi: `${payload.calisanAdi || ''}`.trim(),
+    calisanSicil: `${payload.calisanSicil || ''}`.trim(),
+    calisanKullaniciKodu: `${payload.calisanKullaniciKodu || ''}`.trim(),
+    egitimler: validEgitimler,
+    notlar: `${payload.notlar || ''}`.trim(),
+    durum: 'beklemede',
+  }
+
+  return {
+    talep,
+    egitimler: validEgitimler,
+    duplicateKey: buildTalepDuplicateKey(talep),
+  }
+}
+
+async function getExistingTalepDuplicateKeys(client) {
+  const requestRows = await client.query(
+    `SELECT id, talep_yili, talep_kaynagi, yonetici_adi, yonetici_email, gmy, calisan_lokasyon,
+            calisan_adi, calisan_sicil, calisan_kullanici_kodu, notlar
+     FROM requests`,
+  )
+  const trainingRows = await client.query(
+    `SELECT talep_id, egitim_kodu, egitim_adi, kategori, position
+     FROM request_trainings
+     ORDER BY talep_id ASC, position ASC`,
+  )
+
+  const trainingsByTalepId = trainingRows.rows.reduce((accumulator, row) => {
+    if (!accumulator[row.talep_id]) {
+      accumulator[row.talep_id] = []
+    }
+
+    accumulator[row.talep_id].push({
+      egitimKodu: row.egitim_kodu,
+      egitimAdi: row.egitim_adi,
+      kategori: row.kategori,
+    })
+
+    return accumulator
+  }, {})
+
+  return new Set(
+    requestRows.rows.map((row) =>
+      buildTalepDuplicateKey({
+        talepYili: Number(row.talep_yili || 0),
+        talepKaynagi: row.talep_kaynagi || 'Yıllık Talep',
+        yoneticiAdi: row.yonetici_adi || '',
+        yoneticiEmail: row.yonetici_email || '',
+        gmy: row.gmy || '',
+        calisanLokasyon: row.calisan_lokasyon || '',
+        calisanAdi: row.calisan_adi || '',
+        calisanSicil: row.calisan_sicil || '',
+        calisanKullaniciKodu: row.calisan_kullanici_kodu || '',
+        notlar: row.notlar || '',
+        egitimler: trainingsByTalepId[row.id] || [],
+      }),
+    ),
+  )
+}
+
+async function syncSupportTablesFromImportedRecords(client, records) {
+  if (!records.length) {
+    return
+  }
+
+  const importedGmyValues = [...new Set(records.map((record) => record.talep.gmy).filter(Boolean))]
+  if (importedGmyValues.length) {
+    const existingGmyRows = await client.query('SELECT name FROM gmy_list')
+    const existingGmy = new Set(existingGmyRows.rows.map((row) => row.name))
+    const startPosition = existingGmyRows.rows.length
+    const newGmyRows = importedGmyValues
+      .filter((name) => !existingGmy.has(name))
+      .map((name, index) => [name, startPosition + index])
+
+    await batchInsert(client, 'INSERT INTO gmy_list (name, position)', newGmyRows, 2)
+  }
+
+  const importedCategories = [
+    ...new Set(
+      records
+        .flatMap((record) => record.egitimler.map((egitim) => `${egitim.kategori || 'Teknik'}`.trim() || 'Teknik'))
+        .filter(Boolean),
+    ),
+  ]
+
+  if (importedCategories.length) {
+    const existingCategoryRows = await client.query('SELECT name FROM training_categories')
+    const existingCategories = new Set(existingCategoryRows.rows.map((row) => row.name))
+    const startPosition = existingCategoryRows.rows.length
+    const newCategoryRows = importedCategories
+      .filter((name) => !existingCategories.has(name))
+      .map((name, index) => [name, startPosition + index])
+
+    await batchInsert(client, 'INSERT INTO training_categories (name, position)', newCategoryRows, 2)
+  }
+
+  const existingCatalogRows = await client.query('SELECT id, kod, ad, kategori FROM catalog ORDER BY position ASC')
+  const catalogByName = new Map(existingCatalogRows.rows.map((row) => [normalizeSignatureText(row.ad), row]))
+  const catalogPositionStart = existingCatalogRows.rows.length
+  const catalogRowsToInsert = []
+  const catalogRowsToUpdate = []
+
+  records.forEach((record) => {
+    record.egitimler.forEach((egitim) => {
+      const normalizedName = normalizeSignatureText(egitim.egitimAdi)
+      if (!normalizedName) {
+        return
+      }
+
+      const existingCatalog = catalogByName.get(normalizedName)
+      if (!existingCatalog) {
+        const created = {
+          id: randomUUID(),
+          kod: `${egitim.egitimKodu || ''}`.trim(),
+          ad: `${egitim.egitimAdi || ''}`.trim(),
+          kategori: `${egitim.kategori || 'Teknik'}`.trim() || 'Teknik',
+        }
+        catalogByName.set(normalizedName, created)
+        catalogRowsToInsert.push(created)
+        return
+      }
+
+      const nextCode = `${egitim.egitimKodu || ''}`.trim()
+      const nextCategory = `${egitim.kategori || 'Teknik'}`.trim() || 'Teknik'
+      if (nextCode && existingCatalog.kod !== nextCode) {
+        catalogRowsToUpdate.push({ id: existingCatalog.id, kod: nextCode, kategori: nextCategory })
+      }
+    })
+  })
+
+  const uniqueCatalogUpdates = [...new Map(catalogRowsToUpdate.map((item) => [item.id, item])).values()]
+
+  for (const item of uniqueCatalogUpdates) {
+    await client.query('UPDATE catalog SET kod = $1, kategori = $2 WHERE id = $3', [item.kod, item.kategori, item.id])
+  }
+
+  await batchInsert(
+    client,
+    'INSERT INTO catalog (id, kod, ad, kategori, sure, aciklama, position)',
+    catalogRowsToInsert.map((item, index) => [item.id, item.kod, item.ad, item.kategori, '1 gün', '', catalogPositionStart + index]),
+    7,
+  )
+}
+
+async function appendImportedTalepler(client, payloads, options = {}) {
+  const fallbackYear = Number(options.talepYili || new Date().getFullYear())
+  const maxIssues = Math.max(0, Number(options.maxIssues || 250))
+  const existingKeys = await getExistingTalepDuplicateKeys(client)
+  const importedKeys = new Set()
+  const records = []
+  const issues = []
+  let hiddenIssueCount = 0
+
+  payloads.forEach((payload) => {
+    try {
+      const record = createTalepRecord(payload, fallbackYear)
+
+      if (!record) {
+        return
+      }
+
+      if (existingKeys.has(record.duplicateKey) || importedKeys.has(record.duplicateKey)) {
+        if (issues.length < maxIssues) {
+          issues.push(
+            getIssueDetails(payload, 'Mükerrer satır bulundu. Aynı kayıt daha önce sisteme eklenmiş veya dosyada tekrar ediyor.'),
+          )
+        } else {
+          hiddenIssueCount += 1
+        }
+        return
+      }
+
+      importedKeys.add(record.duplicateKey)
+      records.push(record)
+    } catch (error) {
+      if (issues.length < maxIssues) {
+        issues.push(getIssueDetails(payload, error.message || 'Satır işlenemedi.'))
+      } else {
+        hiddenIssueCount += 1
+      }
+    }
+  })
+
+  if (!records.length && !issues.length) {
+    throw new Error('Excel dosyasında içeri aktarılacak geçerli satır bulunamadı.')
+  }
+
+  if (records.length) {
+    const requestPositionResult = await client.query('SELECT COALESCE(MAX(position), -1) AS value FROM requests')
+    const requestPositionStart = Number(requestPositionResult.rows[0]?.value || -1) + 1
+
+    await batchInsert(
+      client,
+      `INSERT INTO requests (
+         id, talep_yili, talep_kaynagi, yonetici_adi, yonetici_email, gmy,
+         calisan_lokasyon, calisan_adi, calisan_sicil, calisan_kullanici_kodu,
+         notlar, durum, position
+       )`,
+      records.map((record, index) => [
+        record.talep.id,
+        Number(record.talep.talepYili || fallbackYear),
+        record.talep.talepKaynagi || 'Yıllık Talep',
+        record.talep.yoneticiAdi || '',
+        record.talep.yoneticiEmail || '',
+        record.talep.gmy || '',
+        record.talep.calisanLokasyon || '',
+        record.talep.calisanAdi || '',
+        record.talep.calisanSicil || '',
+        record.talep.calisanKullaniciKodu || '',
+        record.talep.notlar || '',
+        record.talep.durum || 'beklemede',
+        requestPositionStart + index,
+      ]),
+      13,
+    )
+
+    const allTrainings = []
+    for (const record of records) {
+      for (const [trainingIndex, egitim] of record.egitimler.entries()) {
+        allTrainings.push([
+          egitim.egitimId,
+          record.talep.id,
+          egitim.egitimKodu || '',
+          egitim.egitimAdi || '',
+          egitim.kategori || 'Teknik',
+          trainingIndex,
+        ])
+      }
+    }
+
+    await batchInsert(
+      client,
+      'INSERT INTO request_trainings (egitim_id, talep_id, egitim_kodu, egitim_adi, kategori, position)',
+      allTrainings,
+      6,
+    )
+
+    await syncSupportTablesFromImportedRecords(client, records)
+  }
+
+  return {
+    importedCount: records.length,
+    issues,
+    hiddenIssueCount,
+    totalIssueCount: issues.length + hiddenIssueCount,
+  }
+}
+
+export async function importTalepler(payloads, options = {}) {
+  const client = await pool.connect()
+
+  try {
+    await client.query('BEGIN')
+    const result = await appendImportedTalepler(client, payloads, options)
+    await client.query('COMMIT')
+    return result
+  } catch (error) {
+    await client.query('ROLLBACK')
+    throw error
+  } finally {
+    client.release()
+  }
 }

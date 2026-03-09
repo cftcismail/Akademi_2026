@@ -5,12 +5,10 @@ import * as XLSX from 'xlsx'
 import Card from '../ui/Card'
 import TalepForm from '../Talepler/TalepForm'
 import Modal from '../ui/Modal'
-import { mapExcelRowsToTalepler } from '../../utils/talepImport'
 import { PARA_BIRIMLERI } from '../../data/constants'
 
 const CATALOG_PAGE_SIZE = 8
 const TRAINER_PAGE_SIZE = 10
-const IMPORT_BATCH_SIZE = 250
 const MAX_VISIBLE_IMPORT_ISSUES = 250
 
 const ADMIN_PASSWORD = 'Akademi.123'
@@ -97,7 +95,7 @@ export default function AdminPage({
   egitmenListesi,
   kurBilgileri,
   addTalep,
-  importTalepler,
+  importTaleplerFromExcelFile,
   addGmy,
   updateGmy,
   deleteGmy,
@@ -201,9 +199,9 @@ export default function AdminPage({
       egitimKategorileri.includes(current.kategori)
         ? current
         : {
-            ...current,
-            kategori: egitimKategorileri[0],
-          },
+          ...current,
+          kategori: egitimKategorileri[0],
+        },
     )
   }, [egitimKategorileri])
 
@@ -420,34 +418,14 @@ export default function AdminPage({
     }
 
     setIsImporting(true)
-    setImportProgress({ processed: 0, total: 0 })
+    setImportProgress({ processed: 0, total: 1 })
 
     try {
-      const workbook = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true })
-      const sheetName = workbook.SheetNames[0]
-
-      if (!sheetName) {
-        throw new Error('Excel dosyasında okunacak sayfa bulunamadı.')
-      }
-
-      const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], {
-        defval: '',
-        raw: true,
+      const result = await importTaleplerFromExcelFile(file, {
+        talepYili: selectedTalepYear,
+        maxIssues: MAX_VISIBLE_IMPORT_ISSUES,
       })
-
-      setImportProgress({ processed: 0, total: rows.length })
-
-      const result = await importTalepler(
-        mapExcelRowsToTalepler(rows).map((payload) => ({
-          ...payload,
-          talepYili: selectedTalepYear,
-        })),
-        {
-          batchSize: IMPORT_BATCH_SIZE,
-          maxIssues: MAX_VISIBLE_IMPORT_ISSUES,
-          onProgress: setImportProgress,
-        },
-      )
+      setImportProgress({ processed: 1, total: 1 })
 
       setValidationIssues(result.issues || [])
       setHiddenValidationIssueCount(result.hiddenIssueCount || 0)

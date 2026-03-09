@@ -1194,6 +1194,35 @@ textarea {
   flex-wrap: wrap;
 }
 
+.pagination-pages {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.pagination-pages .button.is-active {
+  background: var(--primary);
+  border-color: var(--primary);
+  color: #fff;
+}
+
+.page-size-control {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+}
+
+.page-size-control select {
+  width: auto;
+  min-width: 84px;
+  border-radius: 10px;
+  padding: 6px 10px;
+}
+
 .pagination-bar--detail {
   margin-top: 14px;
 }
